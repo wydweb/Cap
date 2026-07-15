@@ -24,6 +24,10 @@ import { Transition } from "solid-transition-group";
 import { createKeyDownSignal } from "~/utils/events";
 
 import { commands } from "~/utils/tauri";
+import {
+	calculateBoundsLabelPosition,
+	resolveVisualBounds,
+} from "./cropper-visuals";
 export interface CropBounds {
 	x: number;
 	y: number;
@@ -246,6 +250,8 @@ export function Cropper(
 		initialCrop?: CropBounds | (() => CropBounds | undefined);
 		aspectRatio?: Ratio;
 		showBounds?: boolean;
+		persistentBoundsLabel?: boolean;
+		previewBounds?: CropBounds;
 		snapToRatioEnabled?: boolean;
 		useBackdropFilter?: boolean;
 		allowLightMode?: boolean;
@@ -257,6 +263,7 @@ export function Cropper(
 	let occBottomRef: HTMLDivElement | undefined;
 	let occLeftRef: HTMLDivElement | undefined;
 	let occRightRef: HTMLDivElement | undefined;
+	let labelResizeObserver: ResizeObserver | undefined;
 
 	const resolvedChildren = children(() => props.children);
 
@@ -268,6 +275,7 @@ export function Cropper(
 	const [isAnimating, setIsAnimating] = createSignal(false);
 	let animationFrameId: number | null = null;
 	const [isReady, setIsReady] = createSignal(false);
+	const [labelSize, setLabelSize] = createSignal({ width: 80, height: 24 });
 
 	function stopAnimation() {
 		if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
@@ -373,7 +381,7 @@ export function Cropper(
 		return bounds;
 	});
 
-	function calculateLabelTransform(handle: HandleSide) {
+	function calculateHandleLabelTransform(handle: HandleSide) {
 		const bounds = rawBounds();
 		if (!containerRef) return { x: 0, y: 0 };
 		const containerRect = containerRef.getBoundingClientRect();
@@ -415,12 +423,6 @@ export function Cropper(
 		return { x: finalX, y: finalY };
 	}
 
-	const labelTransform = createMemo(() =>
-		resizing() && mouseState.hoveringHandle
-			? calculateLabelTransform(mouseState.hoveringHandle)
-			: null,
-	);
-
 	function boundsToRaw(real: CropBounds) {
 		const scale = logicalScale();
 		return {
@@ -429,6 +431,56 @@ export function Cropper(
 			width: Math.max(0, real.width / scale.x),
 			height: Math.max(0, real.height / scale.y),
 		};
+	}
+
+	const visualRawBounds = createMemo(() => {
+		const preview = props.previewBounds;
+		return resolveVisualBounds(
+			mouseState.drag !== null,
+			preview ? boundsToRaw(preview) : undefined,
+			displayRawBounds(),
+		);
+	});
+
+	const boundsLabelValue = createMemo(() =>
+		resolveVisualBounds(
+			mouseState.drag !== null,
+			props.previewBounds,
+			realBounds(),
+		),
+	);
+
+	const labelTransform = createMemo(() => {
+		if (!props.persistentBoundsLabel) {
+			return resizing() && mouseState.hoveringHandle
+				? calculateHandleLabelTransform(mouseState.hoveringHandle)
+				: null;
+		}
+
+		const bounds = visualRawBounds();
+		if (bounds.width <= 1 || bounds.height <= 1 || !containerRef) return null;
+		const containerRect = containerRef.getBoundingClientRect();
+		return calculateBoundsLabelPosition(
+			{
+				x: containerRect.left + bounds.x,
+				y: containerRect.top + bounds.y,
+				width: bounds.width,
+				height: bounds.height,
+			},
+			labelSize(),
+			{ width: window.innerWidth, height: window.innerHeight },
+		);
+	});
+
+	function setLabelElement(element: HTMLDivElement) {
+		labelResizeObserver?.disconnect();
+		const updateSize = () => {
+			const rect = element.getBoundingClientRect();
+			setLabelSize({ width: rect.width, height: rect.height });
+		};
+		labelResizeObserver = new ResizeObserver(updateSize);
+		labelResizeObserver.observe(element);
+		updateSize();
 	}
 
 	function animateToRawBounds(target: CropBounds, durationMs = 240) {
@@ -760,6 +812,7 @@ export function Cropper(
 	onCleanup(() => {
 		disposeActivePointerSession();
 		if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
+		labelResizeObserver?.disconnect();
 	});
 
 	function onHandlePointerDown(handle: HandleSide, e: PointerEvent) {
@@ -1104,6 +1157,14 @@ export function Cropper(
 					regionRef.style.height = `${Math.round(b.height)}px`;
 					regionRef.style.transform = `translate(${Math.round(b.x)}px,${Math.round(b.y)}px)`;
 				}
+			});
+		}),
+	);
+
+	createEffect(
+		on<CropBounds, number>(visualRawBounds, (b, _prevIn, prevFrameId) => {
+			if (prevFrameId) cancelAnimationFrame(prevFrameId);
+			return requestAnimationFrame(() => {
 				if (occLeftRef) {
 					occLeftRef.style.width = `${Math.max(0, Math.round(b.x))}px`;
 				}
@@ -1141,22 +1202,33 @@ export function Cropper(
 		>
 			<Transition
 				appear
-				enterActiveClass="transition-opacity duration-300 ease-in-out"
+				enterActiveClass={
+					props.persistentBoundsLabel
+						? ""
+						: "transition-opacity duration-300 ease-in-out"
+				}
 				enterClass="opacity-0 blur-xs"
 				enterToClass="opacity-100 blur-none"
-				exitActiveClass="transition-opacity duration-300 ease-in-out"
+				exitActiveClass={
+					props.persistentBoundsLabel
+						? ""
+						: "transition-opacity duration-300 ease-in-out"
+				}
 				exitClass="opacity-100 blur-none"
 				exitToClass="opacity-0 blur-xs"
 			>
 				<Show when={props.showBounds && labelTransform()}>
 					{(transform) => (
 						<div
-							class="fixed z-50 pointer-events-none bg-gray-2 text-xs px-2 py-0.5 rounded-full shadow-lg border border-gray-5 font-mono scale-50"
+							ref={setLabelElement}
+							class="fixed z-50 pointer-events-none bg-gray-2 text-xs px-2 py-0.5 rounded-full shadow-lg border border-gray-5 font-mono"
+							classList={{ "scale-50": !props.persistentBoundsLabel }}
 							style={{
 								transform: `translate(${transform().x}px, ${transform().y}px)`,
 							}}
 						>
-							{realBounds().width} x {realBounds().height}
+							{Math.round(boundsLabelValue().width)} ×{" "}
+							{Math.round(boundsLabelValue().height)}
 						</div>
 					)}
 				</Show>

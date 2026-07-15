@@ -786,7 +786,8 @@ function Inner() {
 						return params.isHoveredDisplay === "true";
 					});
 					const shouldShowOverlay = createMemo(
-						() => isInteracting() || isActiveDisplay(),
+						() =>
+							isInteracting() || isActiveDisplay() || hasAreaSelection(crop()),
 					);
 					const shouldShowSelectionHint = createMemo(() => {
 						if (initialAreaBounds() !== undefined) return false;
@@ -1288,7 +1289,12 @@ function Inner() {
 								}}
 								onCropChange={setCrop}
 								initialCrop={() => initialAreaBounds() ?? CROP_ZERO}
-								showBounds={isValid()}
+								showBounds={
+									hasAreaSelection(crop()) ||
+									selectedElementCandidate() !== undefined
+								}
+								persistentBoundsLabel={true}
+								previewBounds={selectedElementCandidate()}
 								snapToRatioEnabled={true}
 								onContextMenu={handleAreaContextMenu}
 							/>

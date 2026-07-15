@@ -26,6 +26,8 @@ import { createKeyDownSignal } from "~/utils/events";
 import { commands } from "~/utils/tauri";
 import {
 	calculateBoundsLabelPosition,
+	fitRatioToLongEdge,
+	fitSizeWithinAvailableBounds,
 	resolveVisualBounds,
 } from "./cropper-visuals";
 export interface CropBounds {
@@ -241,6 +243,7 @@ export function Cropper(
 		onCropChange?: (bounds: CropBounds) => void;
 		onInteraction?: (interacting: boolean) => void;
 		onOverlayClick?: () => CropBounds | undefined;
+		onAspectLabelClick?: (event: MouseEvent, aspect: Ratio) => void;
 		onContextMenu?: (event: PointerEvent) => void;
 		ref?: CropperRef | ((ref: CropperRef) => void);
 		class?: string;
@@ -249,6 +252,7 @@ export function Cropper(
 		targetSize?: Vec2;
 		initialCrop?: CropBounds | (() => CropBounds | undefined);
 		aspectRatio?: Ratio;
+		shiftAspectRatio?: Ratio;
 		showBounds?: boolean;
 		persistentBoundsLabel?: boolean;
 		previewBounds?: CropBounds;
@@ -331,7 +335,7 @@ export function Cropper(
 			() => props.aspectRatio,
 			(v) => {
 				const nextRatio = v ? ratioToValue(v) : null;
-				setAspectState("value", nextRatio);
+				setAspectState({ value: nextRatio, snapped: null });
 
 				if (!isReady() || !nextRatio) return;
 				let targetBounds = rawBounds();
@@ -449,6 +453,12 @@ export function Cropper(
 			realBounds(),
 		),
 	);
+	const visibleAspectLabel = createMemo(() => {
+		if (boundsTooSmall()) return null;
+		if (props.onAspectLabelClick)
+			return aspectState.snapped ?? props.aspectRatio ?? null;
+		return props.aspectRatio ? null : aspectState.snapped;
+	});
 
 	const labelTransform = createMemo(() => {
 		if (!props.persistentBoundsLabel) {
@@ -897,7 +907,10 @@ export function Cropper(
 
 		const { min, max } = rawSizeConstraint();
 		const shiftKey = e.shiftKey;
-		const ratioValue = aspectState.value;
+		const shiftAspect = shiftKey ? props.shiftAspectRatio : undefined;
+		const ratioValue = shiftAspect
+			? ratioToValue(shiftAspect)
+			: aspectState.value;
 
 		const options: ResizeOptions = {
 			container: containerSize(),
@@ -920,6 +933,7 @@ export function Cropper(
 					context.activeHandle,
 					options,
 				) ?? rawBounds();
+			setAspectState("snapped", shiftAspect ?? null);
 		} else {
 			const { bounds, snappedRatio } = computeFreeResize(
 				pointX,
@@ -1407,30 +1421,32 @@ export function Cropper(
 						}
 					</For>
 
-					<Show
-						when={
-							!props.aspectRatio && !boundsTooSmall()
-								? aspectState.snapped
-								: null
-						}
-						keyed
-					>
+					<Show when={visibleAspectLabel()} keyed>
 						{(bounds) => (
 							<div
-								class="w-full h-8 flex items-center justify-center"
+								class="relative z-20 w-full h-8 flex items-center justify-center pointer-events-none"
 								id="cropper-aspect"
 								aria-live="polite"
 							>
-								<div
+								<button
+									type="button"
+									tabIndex={props.onAspectLabelClick ? 0 : -1}
+									aria-label={`Choose crop ratio, currently ${bounds[0]}:${bounds[1]}`}
 									class="h-[18px] w-11 rounded-full text-center text-xs text-gray-12 border border-white/70 dark:border-white/20 drop-shadow-md outline-1 outline-solid outline-black/80"
 									classList={{
 										"backdrop-blur-xs bg-white/50 dark:bg-black/50 dark:backdrop-brightness-90 backdrop-brightness-200":
 											props.useBackdropFilter,
 										"bg-gray-3 opacity-80": !props.useBackdropFilter,
+										"pointer-events-auto cursor-pointer":
+											props.onAspectLabelClick !== undefined,
 									}}
+									onPointerDown={(event) => {
+										if (props.onAspectLabelClick) event.stopPropagation();
+									}}
+									onClick={(event) => props.onAspectLabelClick?.(event, bounds)}
 								>
 									{bounds[0]}:{bounds[1]}
-								</div>
+								</button>
 							</div>
 						)}
 					</Show>
@@ -1483,14 +1499,9 @@ function computeAspectRatioResize(
 	let targetH: number;
 
 	if (handle.isCorner) {
-		// For corners, let the dominant mouse direction drive the aspect ratio
-		if (rawWidth / ratioValue > rawHeight) {
-			targetW = rawWidth;
-			targetH = targetW / ratioValue;
-		} else {
-			targetH = rawHeight;
-			targetW = targetH * ratioValue;
-		}
+		const size = fitRatioToLongEdge(rawWidth, rawHeight, ratioValue);
+		targetW = size.width;
+		targetH = size.height;
 	} else if (handle.x !== "c") {
 		targetW = rawWidth;
 		targetH = targetW / ratioValue;
@@ -1499,20 +1510,24 @@ function computeAspectRatioResize(
 		targetW = targetH * ratioValue;
 	}
 
-	const newX = mX < anchorX ? anchorX - targetW : anchorX;
-	const newY = mY < anchorY ? anchorY - targetH : anchorY;
+	const growsLeft = mX < anchorX;
+	const growsUp = mY < anchorY;
+	const availableSize = {
+		width: growsLeft ? anchorX : container.x - anchorX,
+		height: growsUp ? anchorY : container.y - anchorY,
+	};
+	const fittedSize = fitSizeWithinAvailableBounds(
+		{ width: targetW, height: targetH },
+		availableSize,
+	);
+	targetW = fittedSize.width;
+	targetH = fittedSize.height;
+
+	const newX = growsLeft ? anchorX - targetW : anchorX;
+	const newY = growsUp ? anchorY - targetH : anchorY;
 	let finalBounds = { x: newX, y: newY, width: targetW, height: targetH };
 
-	if (
-		finalBounds.x < 0 ||
-		finalBounds.y < 0 ||
-		finalBounds.x + finalBounds.width > container.x ||
-		finalBounds.y + finalBounds.height > container.y
-	) {
-		return null;
-	}
-
-	const resizeOrigin = { x: mX < anchorX ? 1 : 0, y: mY < anchorY ? 1 : 0 };
+	const resizeOrigin = { x: growsLeft ? 1 : 0, y: growsUp ? 1 : 0 };
 	finalBounds = constrainBoundsToSize(
 		finalBounds,
 		max,
@@ -1689,7 +1704,8 @@ export function createCropOptionsMenuItems(options: {
 			(ratio) =>
 				({
 					text: `${ratio[0]}:${ratio[1]}`,
-					checked: options.aspect === ratio,
+					checked:
+						options.aspect?.[0] === ratio[0] && options.aspect[1] === ratio[1],
 					action: () => options.onAspectSet(ratio),
 				}) satisfies CheckMenuItemOptions,
 		),

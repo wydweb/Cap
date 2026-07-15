@@ -1,11 +1,58 @@
 import { describe, expect, it } from "vitest";
 import {
 	calculateBoundsLabelPosition,
+	fitRatioToLongEdge,
+	fitSizeWithinAvailableBounds,
 	resolveVisualBounds,
 } from "./cropper-visuals";
 
 const label = { width: 80, height: 24 };
 const viewport = { width: 1000, height: 800 };
+
+describe("fitRatioToLongEdge", () => {
+	it("uses width when it is the longer dimension", () => {
+		expect(fitRatioToLongEdge(320, 180, 1)).toEqual({
+			width: 320,
+			height: 320,
+		});
+	});
+
+	it("uses height when it is the longer dimension", () => {
+		expect(fitRatioToLongEdge(180, 320, 1)).toEqual({
+			width: 320,
+			height: 320,
+		});
+	});
+});
+
+describe("fitSizeWithinAvailableBounds", () => {
+	it("uses the remaining vertical space when height reaches the edge first", () => {
+		expect(
+			fitSizeWithinAvailableBounds(
+				{ width: 320, height: 320 },
+				{ width: 500, height: 200 },
+			),
+		).toEqual({ width: 200, height: 200 });
+	});
+
+	it("uses the remaining horizontal space when width reaches the edge first", () => {
+		expect(
+			fitSizeWithinAvailableBounds(
+				{ width: 320, height: 320 },
+				{ width: 180, height: 400 },
+			),
+		).toEqual({ width: 180, height: 180 });
+	});
+
+	it("keeps the requested size when both directions have enough space", () => {
+		expect(
+			fitSizeWithinAvailableBounds(
+				{ width: 320, height: 180 },
+				{ width: 500, height: 400 },
+			),
+		).toEqual({ width: 320, height: 180 });
+	});
+});
 
 describe("resolveVisualBounds", () => {
 	const selection = { x: 10, y: 20, width: 300, height: 200 };

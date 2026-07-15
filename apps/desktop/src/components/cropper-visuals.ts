@@ -13,6 +13,28 @@ export type BoundsLabelPlacement =
 
 type Size = { width: number; height: number };
 
+export function fitRatioToLongEdge(
+	width: number,
+	height: number,
+	ratio: number,
+): Size {
+	if (width / ratio > height) return { width, height: width / ratio };
+	return { width: height * ratio, height };
+}
+
+export function fitSizeWithinAvailableBounds(
+	size: Size,
+	available: Size,
+): Size {
+	if (size.width === 0 || size.height === 0) return size;
+	const scale = Math.min(
+		1,
+		available.width / size.width,
+		available.height / size.height,
+	);
+	return { width: size.width * scale, height: size.height * scale };
+}
+
 export function resolveVisualBounds(
 	interacting: boolean,
 	preview: VisualBounds | undefined,

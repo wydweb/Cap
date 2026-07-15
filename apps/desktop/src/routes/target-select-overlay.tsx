@@ -46,6 +46,8 @@ import {
 	type CropBounds,
 	Cropper,
 	type CropperRef,
+	createCropOptionsMenuItems,
+	type Ratio,
 } from "~/components/Cropper";
 import ModeSelect from "~/components/ModeSelect";
 import SelectionHint from "~/components/selection-hint";
@@ -754,6 +756,8 @@ function Inner() {
 				{(displayId) => {
 					let controlsEl: HTMLDivElement | undefined;
 					let cropperRef: CropperRef | undefined;
+					const [areaAspect, setAreaAspect] = createSignal<Ratio | null>(null);
+					const [areaSnapToRatio, setAreaSnapToRatio] = createSignal(true);
 
 					const [cameraWindow, setCameraWindow] =
 						createSignal<WebviewWindow | null>(null);
@@ -1045,6 +1049,26 @@ function Inner() {
 						await revertCamera();
 					}
 
+					async function showAreaCropOptionsMenu(
+						event: MouseEvent,
+						currentAspect: Ratio,
+					) {
+						event.preventDefault();
+						event.stopPropagation();
+						const rect = (
+							event.currentTarget as HTMLElement
+						).getBoundingClientRect();
+						setAreaAspect(currentAspect);
+						const items = createCropOptionsMenuItems({
+							aspect: currentAspect,
+							snapToRatioEnabled: areaSnapToRatio(),
+							onAspectSet: setAreaAspect,
+							onSnapToRatioSet: setAreaSnapToRatio,
+						});
+						const menu = await Menu.new({ items });
+						await menu.popup(new LogicalPosition(rect.left, rect.bottom + 6));
+					}
+
 					// Spacing rules:
 					// Prefer below the crop (smaller margin)
 					// If no space below, place above the crop (larger top margin)
@@ -1289,13 +1313,16 @@ function Inner() {
 								}}
 								onCropChange={setCrop}
 								initialCrop={() => initialAreaBounds() ?? CROP_ZERO}
+								aspectRatio={areaAspect() ?? undefined}
+								shiftAspectRatio={[1, 1]}
+								onAspectLabelClick={showAreaCropOptionsMenu}
 								showBounds={
 									hasAreaSelection(crop()) ||
 									selectedElementCandidate() !== undefined
 								}
 								persistentBoundsLabel={true}
 								previewBounds={selectedElementCandidate()}
-								snapToRatioEnabled={true}
+								snapToRatioEnabled={areaSnapToRatio()}
 								onContextMenu={handleAreaContextMenu}
 							/>
 						</div>

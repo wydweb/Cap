@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { createResource, createSignal, Show } from "solid-js";
 import toast from "solid-toast";
+import { useI18n } from "~/i18n";
 import { Section, SectionCard, SettingsPageContent } from "./Setting";
 
 type CliInstallStatus = {
@@ -31,6 +32,7 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 export default function CliSettings() {
+	const { t } = useI18n();
 	const [status, { refetch, mutate }] = createResource(getCliInstallStatus);
 	const [isInstalling, setIsInstalling] = createSignal(false);
 	const [isUninstalling, setIsUninstalling] = createSignal(false);
@@ -78,8 +80,8 @@ export default function CliSettings() {
 		<div class="cap-settings-page flex flex-col h-full custom-scroll">
 			<SettingsPageContent>
 				<Section
-					title="Command Line"
-					description="Install the Cap command for terminals, agents, scripts, and local automation."
+					title={t("settings.commandLine")}
+					description={t("settings.cliDescription")}
 				>
 					<SectionCard padded>
 						<Show

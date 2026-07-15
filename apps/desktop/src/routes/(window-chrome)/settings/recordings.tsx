@@ -22,6 +22,7 @@ import {
 } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import CapTooltip from "~/components/Tooltip";
+import { useI18n } from "~/i18n";
 import { Input } from "~/routes/editor/ui";
 import { trackEvent } from "~/utils/analytics";
 import { createTauriEventListener } from "~/utils/createEventListener";
@@ -101,6 +102,7 @@ const recordingsQuery = queryOptions<Recording[]>({
 });
 
 export default function Recordings() {
+	const { t } = useI18n();
 	const [activeTab, setActiveTab] = createSignal<(typeof Tabs)[number]["id"]>(
 		Tabs[0].id,
 	);
@@ -202,8 +204,8 @@ export default function Recordings() {
 		<div class="cap-settings-page flex relative flex-col w-full h-full custom-scroll">
 			<SettingsPageContent class="max-w-none space-y-4">
 				<Section
-					title="Recordings"
-					description="Manage your recordings and perform actions."
+					title={t("settings.recordings")}
+					description={t("settings.recordingsDescription")}
 					right={
 						<Button
 							variant="gray"
@@ -212,7 +214,7 @@ export default function Recordings() {
 							onClick={handleVideoImport}
 						>
 							<IconLucideImport class="size-3.5" />
-							<span>Import</span>
+							<span>{t("settings.import")}</span>
 						</Button>
 					}
 				>
@@ -256,12 +258,12 @@ export default function Recordings() {
 											setSearch("");
 										}
 									}}
-									placeholder="Search"
+									placeholder={t("settings.search")}
 									autoCapitalize="off"
 									autocorrect="off"
 									autocomplete="off"
 									spellcheck={false}
-									aria-label="Search recordings"
+									aria-label={t("settings.searchRecordings")}
 								/>
 							</div>
 						</div>

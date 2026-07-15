@@ -21,6 +21,186 @@ export const enMessages = {
 	"language.interface": "Interface language",
 	"language.simplifiedChinese": "Simplified Chinese",
 	"language.system": "System default",
+	"settings.account": "Account",
+	"settings.automations": "Automations",
+	"settings.changelog": "Changelog",
+	"settings.checkForUpdates": "Check for updates",
+	"settings.checkingForUpdates": "Checking…",
+	"settings.cli": "CLI",
+	"settings.clickToSignIn": "Click to sign in",
+	"settings.download": "Download",
+	"settings.experimental": "Experimental",
+	"settings.feedback": "Feedback",
+	"settings.general": "General",
+	"settings.ignore": "Ignore",
+	"settings.integrations": "Integrations",
+	"settings.later": "Later",
+	"settings.license": "License",
+	"settings.noUpdate": "No Update Available",
+	"settings.noUpdateMessage": "You're already using the latest version of Cap.",
+	"settings.recordings": "Recordings",
+	"settings.screenshots": "Screenshots",
+	"settings.shortcuts": "Shortcuts",
+	"settings.signIn": "Sign In",
+	"settings.signOut": "Sign Out",
+	"settings.signedIn": "Signed in",
+	"settings.transcription": "Transcription",
+	"settings.update": "Update",
+	"settings.updateAvailable":
+		"Version {version} of Cap is available, would you like to install it?",
+	"settings.updateCap": "Update Cap",
+	"settings.updateCheckFailed":
+		"Couldn't check for updates automatically. You can download the latest version of Cap from cap.so/download — your data won't be lost.",
+	"settings.viewPreviousVersions": "View previous versions",
+	"settings.appearance": "Appearance",
+	"settings.appearanceDescription":
+		"Match Cap to your system theme or pick a fixed look.",
+	"settings.dark": "Dark",
+	"settings.interfaceLanguageDescription":
+		"Choose the language used by the Cap desktop app.",
+	"settings.light": "Light",
+	"settings.selectTheme": "Select theme: {theme}",
+	"settings.systemTheme": "System",
+	"settings.themePreview": "Preview of {theme} theme",
+	"settings.automationsDescription":
+		"Run actions automatically when something happens in Cap. Rules are shared with the Cap CLI.",
+	"settings.automationTemplates": "Templates",
+	"settings.automationTemplatesDescription":
+		"One click to add a ready-made automation. Tweak anything afterwards.",
+	"settings.noAutomations": "No automations yet",
+	"settings.noAutomationsDescription":
+		"Pick a template below to get started in one click, or build your own from scratch.",
+	"settings.startFromScratch": "Start from scratch",
+	"settings.cliDescription":
+		"Install the Cap command for terminals, agents, scripts, and local automation.",
+	"settings.commandLine": "Command Line",
+	"settings.experimentalNativePreview": "Native camera preview",
+	"settings.experimentalNativePreviewDescription":
+		"Render the camera preview using a native GPU surface instead of through the webview. Experimental and off by default.",
+	"settings.feedbackDescription":
+		"Help us improve Cap by submitting feedback or reporting bugs. We'll get right on it.",
+	"settings.hotkeysDescription":
+		"Configure system-wide keyboard shortcuts to control Cap.",
+	"settings.hotkeyCycleMode": "Cycle recording mode",
+	"settings.hotkeyOpenPicker": "Open recording picker",
+	"settings.hotkeyPauseResume": "Pause/resume recording",
+	"settings.hotkeyRecordArea": "Record area",
+	"settings.hotkeyRecordDisplay": "Record display",
+	"settings.hotkeyRecordWindow": "Record window",
+	"settings.hotkeyRestart": "Restart recording",
+	"settings.hotkeyScreenshotArea": "Screenshot area picker",
+	"settings.hotkeyScreenshotDisplay": "Screenshot current display",
+	"settings.hotkeyScreenshotWindow": "Screenshot current window",
+	"settings.hotkeyStop": "Stop recording",
+	"settings.import": "Import",
+	"settings.importImage": "Import image",
+	"settings.integrationsDescription":
+		"Configure integrations to extend Cap's functionality and connect with third-party services.",
+	"settings.recordingsDescription":
+		"Manage your recordings and perform actions.",
+	"settings.screenshotsDescription":
+		"Manage your screenshots and perform actions.",
+	"settings.search": "Search",
+	"settings.searchRecordings": "Search recordings",
+	"settings.searchScreenshots": "Search screenshots",
+	"settings.transcriptionDescription":
+		"Add names, spellings, domains, and capitalization preferences that caption generation should keep in mind.",
+	"settings.rememberedTerms": "Remembered terms",
+	"settings.rememberedTermsDescription":
+		"Add one term at a time to reduce typos and formatting mistakes.",
+	"settings.clear": "Clear",
+	"settings.saving": "Saving…",
+	"settings.saved": "Saved",
+	"settings.addTerm": "Add a term",
+	"settings.add": "Add",
+	"settings.captionHintsDescription":
+		"These hints are applied when you generate captions in the editor.",
+	"settings.activeHints": "Active hints",
+	"settings.items": "{count} items",
+	"settings.feedbackPlaceholder": "Tell us what you think about Cap…",
+	"settings.feedbackThanks": "Thank you for your feedback!",
+	"settings.submitFeedback": "Submit Feedback",
+	"settings.submitting": "Submitting…",
+	"settings.joinCommunity": "Join the Community",
+	"settings.joinCommunityDescription":
+		"Have questions, want to share ideas, or just hang out? Join the Cap Discord community.",
+	"settings.joinDiscord": "Join Discord",
+	"settings.debugInformation": "Debug Information",
+	"settings.debugInformationDescription":
+		"Upload your logs to help us diagnose issues with Cap. No personal information is included.",
+	"settings.uploadLogs": "Upload Logs",
+	"settings.uploading": "Uploading…",
+	"settings.systemInformation": "System Information",
+	"settings.loadingSystemInformation": "Loading system information…",
+	"settings.app": "App",
+	"settings.appDescription": "Choose how Cap shows up on your system.",
+	"settings.alwaysShowDockIcon": "Always show dock icon",
+	"settings.alwaysShowDockIconDescription":
+		"Keep Cap in the dock even when no windows are open.",
+	"settings.systemNotifications": "System notifications",
+	"settings.systemNotificationsDescription":
+		"Show notifications for clipboard copies, saved files, and more. You may need to allow Cap in your system's notification settings.",
+	"settings.recordingDescription":
+		"Behaviour while you record and after you stop.",
+	"settings.countdown": "Countdown",
+	"settings.countdownDescription": "Wait before the recording starts.",
+	"settings.mainWindowOnStart": "Main window when recording starts",
+	"settings.mainWindowOnStartDescription":
+		"What happens to the main window once a recording begins.",
+	"settings.close": "Close",
+	"settings.minimise": "Minimise",
+	"settings.afterStudioRecording": "After a Studio recording",
+	"settings.afterStudioRecordingDescription":
+		"What happens once you stop a Studio recording.",
+	"settings.openEditor": "Open editor",
+	"settings.showInOverlay": "Show in overlay",
+	"settings.afterDeletingRecording": "After deleting a recording",
+	"settings.afterDeletingRecordingDescription":
+		"Whether the recording window should reopen.",
+	"settings.doNothing": "Do nothing",
+	"settings.reopenRecordingWindow": "Reopen recording window",
+	"settings.deleteInstantAfterUpload": "Delete Instant recordings after upload",
+	"settings.deleteInstantAfterUploadDescription":
+		"Cap removes the local file once it has uploaded successfully.",
+	"settings.crashRecoverable": "Crash-recoverable recording",
+	"settings.crashRecoverableDescription":
+		"Record in fragments that can be recovered after a crash or power loss. Slightly larger files during capture.",
+	"settings.customCursorCapture": "Custom cursor capture (Studio)",
+	"settings.customCursorCaptureDescription":
+		"Capture cursor state separately so you can adjust size and smoothing in the editor.",
+	"settings.autoZoomOnClicks": "Auto zoom on clicks",
+	"settings.autoZoomOnClicksDescription":
+		"Automatically add zoom segments around mouse clicks in Studio recordings.",
+	"settings.captureKeyboardPresses": "Capture keyboard presses",
+	"settings.captureKeyboardPressesDescription":
+		"Record key presses so you can add keyboard overlays in the editor.",
+	"settings.maxCaptureFramerate": "Max capture framerate",
+	"settings.maxCaptureFramerateDescription":
+		"Maximum framerate for screen capture.",
+	"settings.maxCaptureFramerateHighDescription":
+		"Maximum framerate for screen capture. Higher values may cause drops or increased CPU usage on some systems.",
+	"settings.storage": "Storage",
+	"settings.storageDescription": "Where Cap saves your recordings.",
+	"settings.privacy": "Privacy",
+	"settings.shareTelemetry": "Share anonymous telemetry",
+	"settings.shareTelemetryDescription":
+		"Cap uses anonymous telemetry to improve reliability and fix bugs. We never collect recording contents, window titles, file paths, or personal information.",
+	"settings.updates": "Updates",
+	"settings.updatesDescription": "Choose which Cap builds you receive.",
+	"settings.quality": "Quality",
+	"settings.qualityDescription":
+		"Pick the right profile for local Studio recordings.",
+	"settings.capProDescription": "Settings available with a Cap Pro license.",
+	"settings.autoOpenLinks": "Auto-open shareable links",
+	"settings.autoOpenLinksDescription":
+		"Open the share link in your browser as soon as the upload finishes.",
+	"settings.selfHost": "Self-host",
+	"settings.selfHostDescription":
+		"Only change this if you are running your own instance of Cap Web.",
+	"settings.defaultProjectName": "Default project name",
+	"settings.defaultProjectNameDescription":
+		"Template used for new recordings and exported files.",
+	"settings.excludedWindows": "Excluded windows",
 	"mode.instant": "Instant",
 	"mode.instantDescription":
 		"Share instantly with a link. Uploads as you record.",

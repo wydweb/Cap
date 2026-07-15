@@ -17,6 +17,7 @@ import {
 	Show,
 } from "solid-js";
 import toast from "solid-toast";
+import { useI18n } from "~/i18n";
 import { Input } from "~/routes/editor/ui";
 import {
 	createScreenshotShareLinkFromProjectPath,
@@ -53,6 +54,7 @@ const screenshotsQuery = queryOptions<Screenshot[]>({
 });
 
 export default function Screenshots() {
+	const { t } = useI18n();
 	const [search, setSearch] = createSignal("");
 	const trimmedSearch = createMemo(() => search().trim());
 	const normalizedSearch = createMemo(() => trimmedSearch().toLowerCase());
@@ -164,8 +166,8 @@ export default function Screenshots() {
 		<div class="cap-settings-page flex relative flex-col w-full h-full custom-scroll">
 			<SettingsPageContent class="max-w-none space-y-4">
 				<Section
-					title="Screenshots"
-					description="Manage your screenshots and perform actions."
+					title={t("settings.screenshots")}
+					description={t("settings.screenshotsDescription")}
 					right={
 						<Button
 							variant="gray"
@@ -174,7 +176,7 @@ export default function Screenshots() {
 							onClick={handleImportImage}
 						>
 							<IconLucideImport class="size-3.5" />
-							<span>Import image</span>
+							<span>{t("settings.importImage")}</span>
 						</Button>
 					}
 				>
@@ -202,12 +204,12 @@ export default function Screenshots() {
 											setSearch("");
 										}
 									}}
-									placeholder="Search"
+									placeholder={t("settings.search")}
 									autoCapitalize="off"
 									autocorrect="off"
 									autocomplete="off"
 									spellcheck={false}
-									aria-label="Search screenshots"
+									aria-label={t("settings.searchScreenshots")}
 								/>
 							</div>
 						</div>

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { type } from "@tauri-apps/plugin-os";
 import { createResource, Show } from "solid-js";
 import { createStore } from "solid-js/store";
+import { useI18n } from "~/i18n";
 
 import { generalSettingsStore } from "~/store";
 import {
@@ -30,6 +31,7 @@ function Inner(props: {
 	initialStore: GeneralSettingsStore | null;
 	osType: ReturnType<typeof type>;
 }) {
+	const { t } = useI18n();
 	const [settings, setSettings] = createStore<GeneralSettingsStore>(
 		deriveGeneralSettings(props.initialStore),
 	);
@@ -69,8 +71,8 @@ function Inner(props: {
 					<Section title="Preview">
 						<SectionRows>
 							<ToggleSettingItem
-								label="Native camera preview"
-								description="Render the camera preview using a native GPU surface instead of through the webview. Experimental and off by default."
+								label={t("settings.experimentalNativePreview")}
+								description={t("settings.experimentalNativePreviewDescription")}
 								value={!!settings.enableNativeCameraPreview}
 								onChange={(value) =>
 									handleChange("enableNativeCameraPreview", value)

@@ -25,6 +25,7 @@ import toast from "solid-toast";
 import themePreviewAuto from "~/assets/theme-previews/auto.jpg";
 import themePreviewDark from "~/assets/theme-previews/dark.jpg";
 import themePreviewLight from "~/assets/theme-previews/light.jpg";
+import { type LocalePreference, useI18n } from "~/i18n";
 import { Input } from "~/routes/editor/ui";
 import { authStore, generalSettingsStore } from "~/store";
 import { clientEnv } from "~/utils/env";
@@ -139,10 +140,11 @@ function AppearanceSection(props: {
 	currentTheme: AppTheme;
 	onThemeChange: (theme: AppTheme) => void;
 }) {
+	const { preference, setPreference, t } = useI18n();
 	const options = [
-		{ id: "system", name: "System" },
-		{ id: "light", name: "Light" },
-		{ id: "dark", name: "Dark" },
+		{ id: "system", name: t("settings.systemTheme") },
+		{ id: "light", name: t("settings.light") },
+		{ id: "dark", name: t("settings.dark") },
 	] satisfies { id: AppTheme; name: string }[];
 
 	const previews = {
@@ -153,8 +155,8 @@ function AppearanceSection(props: {
 
 	return (
 		<Section
-			title="Appearance"
-			description="Match Cap to your system theme or pick a fixed look."
+			title={t("settings.appearance")}
+			description={t("settings.appearanceDescription")}
 		>
 			<SectionCard padded>
 				<div
@@ -168,7 +170,9 @@ function AppearanceSection(props: {
 								<button
 									type="button"
 									aria-checked={isSelected()}
-									aria-label={`Select theme: ${theme.name}`}
+									aria-label={t("settings.selectTheme", {
+										theme: theme.name,
+									})}
 									onClick={() => props.onThemeChange(theme.id)}
 									class="flex flex-col gap-2 items-center group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-9 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-1 rounded-xl"
 								>
@@ -186,7 +190,9 @@ function AppearanceSection(props: {
 													class="object-cover w-full h-full animate-in fade-in duration-200"
 													draggable={false}
 													src={preview}
-													alt={`Preview of ${theme.name} theme`}
+													alt={t("settings.themePreview", {
+														theme: theme.name,
+													})}
 												/>
 											)}
 										</Show>
@@ -205,11 +211,30 @@ function AppearanceSection(props: {
 					</For>
 				</div>
 			</SectionCard>
+			<SectionRows>
+				<SettingItem
+					label={t("language.interface")}
+					description={t("settings.interfaceLanguageDescription")}
+				>
+					<select
+						class="rounded-lg border border-gray-5 bg-gray-3 px-2.5 py-1.5 text-xs text-gray-12 outline-none focus:border-blue-9"
+						value={preference()}
+						onChange={(event) =>
+							setPreference(event.currentTarget.value as LocalePreference)
+						}
+					>
+						<option value="system">{t("language.system")}</option>
+						<option value="en">{t("language.english")}</option>
+						<option value="zh-CN">{t("language.simplifiedChinese")}</option>
+					</select>
+				</SettingItem>
+			</SectionRows>
 		</Section>
 	);
 }
 
 function Inner(props: { initialStore: GeneralSettingsStore | null }) {
+	const { t } = useI18n();
 	const [settings, setSettings] = createStore<ExtendedGeneralSettingsStore>(
 		deriveGeneralSettings(props.initialStore),
 	);
@@ -487,19 +512,19 @@ function Inner(props: { initialStore: GeneralSettingsStore | null }) {
 
 				{ostype === "macos" && (
 					<Section
-						title="App"
-						description="Choose how Cap shows up on your system."
+						title={t("settings.app")}
+						description={t("settings.appDescription")}
 					>
 						<SectionRows>
 							<ToggleSettingItem
-								label="Always show dock icon"
-								description="Keep Cap in the dock even when no windows are open."
+								label={t("settings.alwaysShowDockIcon")}
+								description={t("settings.alwaysShowDockIconDescription")}
 								value={!settings.hideDockIcon}
 								onChange={(v) => handleChange("hideDockIcon", !v)}
 							/>
 							<ToggleSettingItem
-								label="System notifications"
-								description="Show notifications for clipboard copies, saved files, and more. You may need to allow Cap in your system's notification settings."
+								label={t("settings.systemNotifications")}
+								description={t("settings.systemNotificationsDescription")}
 								value={!!settings.enableNotifications}
 								onChange={async (value) => {
 									if (value) {
@@ -536,101 +561,101 @@ function Inner(props: { initialStore: GeneralSettingsStore | null }) {
 				/>
 
 				<Section
-					title="Recording"
-					description="Behaviour while you record and after you stop."
+					title={t("settings.recordings")}
+					description={t("settings.recordingDescription")}
 				>
 					<SectionRows>
 						<SelectSettingItem
-							label="Countdown"
-							description="Wait before the recording starts."
+							label={t("settings.countdown")}
+							description={t("settings.countdownDescription")}
 							value={settings.recordingCountdown ?? 0}
 							onChange={(value) => handleChange("recordingCountdown", value)}
 							options={[
-								{ text: "Off", value: 0 },
-								{ text: "3 seconds", value: 3 },
-								{ text: "5 seconds", value: 5 },
-								{ text: "10 seconds", value: 10 },
+								{ text: t("recording.off"), value: 0 },
+								{ text: t("recording.seconds", { count: 3 }), value: 3 },
+								{ text: t("recording.seconds", { count: 5 }), value: 5 },
+								{ text: t("recording.seconds", { count: 10 }), value: 10 },
 							]}
 						/>
 						<SelectSettingItem
-							label="Main window when recording starts"
-							description="What happens to the main window once a recording begins."
+							label={t("settings.mainWindowOnStart")}
+							description={t("settings.mainWindowOnStartDescription")}
 							value={settings.mainWindowRecordingStartBehaviour ?? "close"}
 							onChange={(value) =>
 								handleChange("mainWindowRecordingStartBehaviour", value)
 							}
 							options={[
-								{ text: "Close", value: "close" },
-								{ text: "Minimise", value: "minimise" },
+								{ text: t("settings.close"), value: "close" },
+								{ text: t("settings.minimise"), value: "minimise" },
 							]}
 						/>
 						<SelectSettingItem
-							label="After a Studio recording"
-							description="What happens once you stop a Studio recording."
+							label={t("settings.afterStudioRecording")}
+							description={t("settings.afterStudioRecordingDescription")}
 							value={settings.postStudioRecordingBehaviour ?? "openEditor"}
 							onChange={(value) =>
 								handleChange("postStudioRecordingBehaviour", value)
 							}
 							options={[
-								{ text: "Open editor", value: "openEditor" },
-								{ text: "Show in overlay", value: "showOverlay" },
+								{ text: t("settings.openEditor"), value: "openEditor" },
+								{ text: t("settings.showInOverlay"), value: "showOverlay" },
 							]}
 						/>
 						<SelectSettingItem
-							label="After deleting a recording"
-							description="Whether the recording window should reopen."
+							label={t("settings.afterDeletingRecording")}
+							description={t("settings.afterDeletingRecordingDescription")}
 							value={settings.postDeletionBehaviour ?? "doNothing"}
 							onChange={(value) => handleChange("postDeletionBehaviour", value)}
 							options={[
-								{ text: "Do nothing", value: "doNothing" },
+								{ text: t("settings.doNothing"), value: "doNothing" },
 								{
-									text: "Reopen recording window",
+									text: t("settings.reopenRecordingWindow"),
 									value: "reopenRecordingWindow",
 								},
 							]}
 						/>
 						<ToggleSettingItem
-							label="Delete Instant recordings after upload"
-							description="Cap removes the local file once it has uploaded successfully."
+							label={t("settings.deleteInstantAfterUpload")}
+							description={t("settings.deleteInstantAfterUploadDescription")}
 							value={settings.deleteInstantRecordingsAfterUpload ?? false}
 							onChange={(v) =>
 								handleChange("deleteInstantRecordingsAfterUpload", v)
 							}
 						/>
 						<ToggleSettingItem
-							label="Crash-recoverable recording"
-							description="Record in fragments that can be recovered after a crash or power loss. Slightly larger files during capture."
+							label={t("settings.crashRecoverable")}
+							description={t("settings.crashRecoverableDescription")}
 							value={settings.crashRecoveryRecording ?? true}
 							onChange={(value) =>
 								handleChange("crashRecoveryRecording", value)
 							}
 						/>
 						<ToggleSettingItem
-							label="Custom cursor capture (Studio)"
-							description="Capture cursor state separately so you can adjust size and smoothing in the editor."
+							label={t("settings.customCursorCapture")}
+							description={t("settings.customCursorCaptureDescription")}
 							value={!!settings.custom_cursor_capture2}
 							onChange={(value) =>
 								handleChange("custom_cursor_capture2", value)
 							}
 						/>
 						<ToggleSettingItem
-							label="Auto zoom on clicks"
-							description="Automatically add zoom segments around mouse clicks in Studio recordings."
+							label={t("settings.autoZoomOnClicks")}
+							description={t("settings.autoZoomOnClicksDescription")}
 							value={!!settings.autoZoomOnClicks}
 							onChange={(value) => handleChange("autoZoomOnClicks", value)}
 						/>
 						<ToggleSettingItem
-							label="Capture keyboard presses"
-							description="Record key presses so you can add keyboard overlays in the editor."
+							label={t("settings.captureKeyboardPresses")}
+							description={t("settings.captureKeyboardPressesDescription")}
 							value={!!settings.captureKeyboardEvents}
 							onChange={(value) => handleChange("captureKeyboardEvents", value)}
 						/>
 						<SelectSettingItem
-							label="Max capture framerate"
+							label={t("settings.maxCaptureFramerate")}
 							description={
 								(settings.maxFps ?? 60) > 60
-									? "Maximum framerate for screen capture. Higher values may cause drops or increased CPU usage on some systems."
-									: "Maximum framerate for screen capture."
+									? t("settings.maxCaptureFramerateHighDescription")
+									: t("settings.maxCaptureFramerateDescription")
 							}
 							value={settings.maxFps ?? 60}
 							onChange={(value) => handleChange("maxFps", value)}
@@ -788,12 +813,16 @@ function StorageSection(props: {
 	onPick: () => Promise<void>;
 	onReset: () => Promise<void>;
 }) {
+	const { t } = useI18n();
 	const defaultLabel = "Default (Application Support)";
 	const displayPath = () => props.recordingsPath ?? defaultLabel;
 	const isCustom = () => props.recordingsPath !== null;
 
 	return (
-		<Section title="Storage" description="Where Cap saves your recordings.">
+		<Section
+			title={t("settings.storage")}
+			description={t("settings.storageDescription")}
+		>
 			<SectionCard padded>
 				<div class="flex flex-col gap-3">
 					<div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-3 border border-gray-4 min-w-0">
@@ -821,12 +850,13 @@ function TelemetryCard(props: {
 	value: boolean;
 	onChange: (value: boolean) => void;
 }) {
+	const { t } = useI18n();
 	return (
-		<Section title="Privacy">
+		<Section title={t("settings.privacy")}>
 			<SectionRows>
 				<ToggleSettingItem
-					label="Share anonymous telemetry"
-					description="Cap uses anonymous telemetry to improve reliability and fix bugs. We never collect recording contents, window titles, file paths, or personal information."
+					label={t("settings.shareTelemetry")}
+					description={t("settings.shareTelemetryDescription")}
 					value={props.value}
 					onChange={props.onChange}
 				/>
@@ -859,6 +889,7 @@ function UpdatesSection(props: {
 	value: UpdateChannel;
 	onChange: (value: UpdateChannel) => void;
 }) {
+	const { t } = useI18n();
 	const currentOption = createMemo(
 		() =>
 			UPDATE_CHANNEL_OPTIONS.find((option) => option.value === props.value) ??
@@ -866,7 +897,10 @@ function UpdatesSection(props: {
 	);
 
 	return (
-		<Section title="Updates" description="Choose which Cap builds you receive.">
+		<Section
+			title={t("settings.updates")}
+			description={t("settings.updatesDescription")}
+		>
 			<SectionCard>
 				<div class="flex flex-col gap-3 px-4 py-4">
 					<div class="flex justify-between items-start gap-4">
@@ -1104,12 +1138,9 @@ function CapProSection(props: {
 	autoOpenShareableLinks: boolean;
 	onAutoOpenShareableLinksChange: (value: boolean) => void;
 }) {
+	const { t } = useI18n();
 	return (
-		<Section
-			title="Cap Pro"
-			description="Settings available with a Cap Pro license."
-			pro
-		>
+		<Section title="Cap Pro" description={t("settings.capProDescription")} pro>
 			<SectionRows>
 				<InstantQualitySetting
 					hasCapPro={props.hasCapPro}
@@ -1117,8 +1148,8 @@ function CapProSection(props: {
 					onChange={props.onInstantResolutionChange}
 				/>
 				<ToggleSettingItem
-					label="Auto-open shareable links"
-					description="Open the share link in your browser as soon as the upload finishes."
+					label={t("settings.autoOpenLinks")}
+					description={t("settings.autoOpenLinksDescription")}
 					value={props.autoOpenShareableLinks}
 					onChange={props.onAutoOpenShareableLinksChange}
 				/>
@@ -1131,10 +1162,11 @@ function QualitySection(props: {
 	studioQuality: StudioRecordingQuality;
 	onStudioQualityChange: (value: StudioRecordingQuality) => void;
 }) {
+	const { t } = useI18n();
 	return (
 		<Section
-			title="Quality"
-			description="Pick the right profile for local Studio recordings."
+			title={t("settings.quality")}
+			description={t("settings.qualityDescription")}
 		>
 			<SectionCard>
 				<StudioQualitySubsection
@@ -1151,6 +1183,7 @@ function ServerURLSetting(props: {
 	defaultValue: string;
 	onChange: (v: string) => void;
 }) {
+	const { t } = useI18n();
 	const [value, setValue] = createWritableMemo(() => props.value);
 	const isDefaultValue = () =>
 		props.value === props.defaultValue && value() === props.defaultValue;
@@ -1165,8 +1198,8 @@ function ServerURLSetting(props: {
 
 	return (
 		<Section
-			title="Self-host"
-			description="Only change this if you are running your own instance of Cap Web."
+			title={t("settings.selfHost")}
+			description={t("settings.selfHostDescription")}
 		>
 			<SectionCard padded>
 				<div class="flex flex-col gap-3">
@@ -1206,6 +1239,7 @@ function DefaultProjectNameCard(props: {
 	value: string | null;
 	onChange: (name: string | null) => Promise<void>;
 }) {
+	const { t } = useI18n();
 	const MOMENT_EXAMPLE_TEMPLATE = "{moment:DDDD, MMMM D, YYYY h:mm A}";
 	const macos = type() === "macos";
 	const today = new Date();
@@ -1280,8 +1314,8 @@ function DefaultProjectNameCard(props: {
 
 	return (
 		<Section
-			title="Default project name"
-			description="Template used for new recordings and exported files."
+			title={t("settings.defaultProjectName")}
+			description={t("settings.defaultProjectNameDescription")}
 			right={
 				<>
 					<Button
@@ -1403,6 +1437,7 @@ function ExcludedWindowsCard(props: {
 	isLoading: boolean;
 	isWindows: boolean;
 }) {
+	const { t } = useI18n();
 	const hasExclusions = () => props.excludedWindows.length > 0;
 	const hasMissingDefaultExclusions = () =>
 		props.missingDefaultExclusions.length > 0;
@@ -1469,7 +1504,7 @@ function ExcludedWindowsCard(props: {
 
 	return (
 		<Section
-			title="Excluded windows"
+			title={t("settings.excludedWindows")}
 			description={
 				props.isWindows
 					? "Hide windows from recordings. On Windows, only Cap-related windows can be excluded."

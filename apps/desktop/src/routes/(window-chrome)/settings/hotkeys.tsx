@@ -12,6 +12,7 @@ import {
 	Switch,
 } from "solid-js";
 import { createStore } from "solid-js/store";
+import { type MessageKey, useI18n } from "~/i18n";
 import { hotkeysStore } from "~/store";
 
 import {
@@ -23,20 +24,18 @@ import {
 import { Section, SectionCard, SettingsPageContent } from "./Setting";
 
 const ACTION_TEXT = {
-	startStudioRecording: "Start studio recording",
-	startInstantRecording: "Start instant recording",
-	restartRecording: "Restart recording",
-	stopRecording: "Stop recording",
-	togglePauseRecording: "Pause/resume recording",
-	cycleRecordingMode: "Cycle recording mode",
-	openRecordingPicker: "Open recording picker",
-	openRecordingPickerDisplay: "Record display",
-	openRecordingPickerWindow: "Record window",
-	openRecordingPickerArea: "Record area",
-	screenshotDisplay: "Screenshot current display",
-	screenshotWindow: "Screenshot current window",
-	screenshotArea: "Screenshot area picker",
-} satisfies { [K in HotkeyAction]?: string };
+	restartRecording: "settings.hotkeyRestart",
+	stopRecording: "settings.hotkeyStop",
+	togglePauseRecording: "settings.hotkeyPauseResume",
+	cycleRecordingMode: "settings.hotkeyCycleMode",
+	openRecordingPicker: "settings.hotkeyOpenPicker",
+	openRecordingPickerDisplay: "settings.hotkeyRecordDisplay",
+	openRecordingPickerWindow: "settings.hotkeyRecordWindow",
+	openRecordingPickerArea: "settings.hotkeyRecordArea",
+	screenshotDisplay: "settings.hotkeyScreenshotDisplay",
+	screenshotWindow: "settings.hotkeyScreenshotWindow",
+	screenshotArea: "settings.hotkeyScreenshotArea",
+} satisfies { [K in HotkeyAction]?: MessageKey };
 
 export default function () {
 	const [store] = createResource(() => hotkeysStore.get());
@@ -50,6 +49,7 @@ export default function () {
 
 const MODIFIER_KEYS = new Set(["Meta", "Shift", "Control", "Alt"]);
 function Inner(props: { initialStore: HotkeysStore | null }) {
+	const { t } = useI18n();
 	const [hotkeys, setHotkeys] = createStore<{
 		[K in HotkeyAction]?: Hotkey;
 	}>(props.initialStore?.hotkeys ?? {});
@@ -101,8 +101,8 @@ function Inner(props: { initialStore: HotkeysStore | null }) {
 		<div class="cap-settings-page flex flex-col h-full custom-scroll">
 			<SettingsPageContent>
 				<Section
-					title="Shortcuts"
-					description="Configure system-wide keyboard shortcuts to control Cap."
+					title={t("settings.shortcuts")}
+					description={t("settings.hotkeysDescription")}
 				>
 					<SectionCard class="flex flex-col gap-3 p-4">
 						<Index each={actions()}>
@@ -120,7 +120,7 @@ function Inner(props: { initialStore: HotkeysStore | null }) {
 									<>
 										<div class="flex flex-row justify-between items-center w-full h-8">
 											<p class="text-[13px] text-gray-12">
-												{ACTION_TEXT[item()]}
+												{t(ACTION_TEXT[item()])}
 											</p>
 											<Switch>
 												<Match when={listening()?.action === item()}>

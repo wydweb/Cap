@@ -15,6 +15,7 @@ import { createStore, produce } from "solid-js/store";
 import { Dynamic } from "solid-js/web";
 import toast from "solid-toast";
 import { Toggle } from "~/components/Toggle";
+import { useI18n } from "~/i18n";
 import { presetsStore } from "~/store";
 import {
 	ACTION_LABELS,
@@ -438,6 +439,7 @@ function RowButton(props: {
 }
 
 export default function AutomationsSettings() {
+	const { t } = useI18n();
 	const [store, setStore] = createStore<AutomationsStore>({
 		version: 1,
 		rules: [],
@@ -519,8 +521,8 @@ export default function AutomationsSettings() {
 		<div class="cap-settings-page flex flex-col h-full custom-scroll">
 			<SettingsPageContent>
 				<Section
-					title="Automations"
-					description="Run actions automatically when something happens in Cap. Rules are shared with the Cap CLI."
+					title={t("settings.automations")}
+					description={t("settings.automationsDescription")}
 				>
 					<Suspense
 						fallback={<div class="h-24 rounded-xl bg-gray-3 animate-pulse" />}
@@ -558,8 +560,8 @@ export default function AutomationsSettings() {
 				</Section>
 
 				<Section
-					title="Templates"
-					description="One click to add a ready-made automation. Tweak anything afterwards."
+					title={t("settings.automationTemplates")}
+					description={t("settings.automationTemplatesDescription")}
 				>
 					<div class="grid grid-cols-2 gap-2.5">
 						<For each={TEMPLATES}>
@@ -578,16 +580,18 @@ export default function AutomationsSettings() {
 }
 
 function EmptyState(props: { onCreate: () => void }) {
+	const { t } = useI18n();
 	return (
 		<SectionCard padded>
 			<div class="flex flex-col gap-2 items-center py-6 text-center">
 				<div class="flex justify-center items-center mb-1 rounded-full size-11 bg-gray-3 text-gray-10">
 					<IconLucideZap class="size-5" />
 				</div>
-				<p class="text-[13px] font-medium text-gray-12">No automations yet</p>
+				<p class="text-[13px] font-medium text-gray-12">
+					{t("settings.noAutomations")}
+				</p>
 				<p class="max-w-xs text-xs leading-relaxed text-gray-10">
-					Pick a template below to get started in one click, or build your own
-					from scratch.
+					{t("settings.noAutomationsDescription")}
 				</p>
 				<Button
 					variant="gray"
@@ -596,7 +600,7 @@ function EmptyState(props: { onCreate: () => void }) {
 					class="flex gap-1.5 items-center mt-1"
 				>
 					<IconLucidePlus class="size-3.5" />
-					Start from scratch
+					{t("settings.startFromScratch")}
 				</Button>
 			</div>
 		</SectionCard>

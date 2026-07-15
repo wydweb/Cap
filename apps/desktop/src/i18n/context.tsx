@@ -70,10 +70,19 @@ export function I18nProvider(props: ParentProps) {
 
 	onMount(() => {
 		const handleLanguageChange = () => setLanguages(browserLanguages());
+		const handleStorage = (event: StorageEvent) => {
+			if (
+				event.key === LOCALE_STORAGE_KEY &&
+				isLocalePreference(event.newValue)
+			)
+				setPreferenceSignal(event.newValue);
+		};
 		window.addEventListener("languagechange", handleLanguageChange);
-		onCleanup(() =>
-			window.removeEventListener("languagechange", handleLanguageChange),
-		);
+		window.addEventListener("storage", handleStorage);
+		onCleanup(() => {
+			window.removeEventListener("languagechange", handleLanguageChange);
+			window.removeEventListener("storage", handleStorage);
+		});
 	});
 
 	const value: I18nContextValue = {

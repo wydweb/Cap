@@ -5,6 +5,7 @@ import { type OsType, type as ostype } from "@tauri-apps/plugin-os";
 import * as shell from "@tauri-apps/plugin-shell";
 import { createResource, createSignal, For, Show } from "solid-js";
 import toast from "solid-toast";
+import { useI18n } from "~/i18n";
 
 import { commands, type SystemDiagnostics } from "~/utils/tauri";
 import { apiClient, protectedHeaders } from "~/utils/web-api";
@@ -36,6 +37,7 @@ async function fetchDiagnostics(): Promise<SystemDiagnostics | null> {
 }
 
 export default function FeedbackTab() {
+	const { t } = useI18n();
 	const [feedback, setFeedback] = createSignal("");
 	const [uploadingLogs, setUploadingLogs] = createSignal(false);
 	const [diagnostics] = createResource(fetchDiagnostics);
@@ -60,8 +62,8 @@ export default function FeedbackTab() {
 		<div class="cap-settings-page flex flex-col w-full h-full custom-scroll">
 			<SettingsPageContent>
 				<Section
-					title="Feedback"
-					description="Help us improve Cap by submitting feedback or reporting bugs. We'll get right on it."
+					title={t("settings.feedback")}
+					description={t("settings.feedbackDescription")}
 				>
 					<form
 						class="space-y-4"
@@ -75,7 +77,7 @@ export default function FeedbackTab() {
 								<textarea
 									value={feedback()}
 									onInput={(e) => setFeedback(e.currentTarget.value)}
-									placeholder="Tell us what you think about Cap..."
+									placeholder={t("settings.feedbackPlaceholder")}
 									required
 									minLength={10}
 									class="p-2 w-full h-32 text-[13px] rounded-md border transition-colors duration-200 resize-none bg-gray-2 placeholder:text-gray-10 border-gray-3 text-primary focus:outline-hidden focus:ring-1 focus:ring-gray-8 hover:border-gray-6"
@@ -89,7 +91,9 @@ export default function FeedbackTab() {
 							)}
 
 							{submission.result?.success && (
-								<p class="text-sm text-primary">Thank you for your feedback!</p>
+								<p class="text-sm text-primary">
+									{t("settings.feedbackThanks")}
+								</p>
 							)}
 
 							<Button
@@ -99,28 +103,30 @@ export default function FeedbackTab() {
 								disabled={feedback().trim().length < 4}
 								class="mt-2"
 							>
-								{submission.pending ? "Submitting..." : "Submit Feedback"}
+								{submission.pending
+									? t("settings.submitting")
+									: t("settings.submitFeedback")}
 							</Button>
 						</fieldset>
 					</form>
 				</Section>
 
 				<Section
-					title="Join the Community"
-					description="Have questions, want to share ideas, or just hang out? Join the Cap Discord community."
+					title={t("settings.joinCommunity")}
+					description={t("settings.joinCommunityDescription")}
 				>
 					<Button
 						onClick={() => shell.open("https://cap.link/discord")}
 						size="md"
 						variant="gray"
 					>
-						Join Discord
+						{t("settings.joinDiscord")}
 					</Button>
 				</Section>
 
 				<Section
-					title="Debug Information"
-					description="Upload your logs to help us diagnose issues with Cap. No personal information is included."
+					title={t("settings.debugInformation")}
+					description={t("settings.debugInformationDescription")}
 				>
 					<Button
 						onClick={handleUploadLogs}
@@ -128,16 +134,18 @@ export default function FeedbackTab() {
 						variant="gray"
 						disabled={uploadingLogs()}
 					>
-						{uploadingLogs() ? "Uploading..." : "Upload Logs"}
+						{uploadingLogs()
+							? t("settings.uploading")
+							: t("settings.uploadLogs")}
 					</Button>
 				</Section>
 
-				<Section title="System Information">
+				<Section title={t("settings.systemInformation")}>
 					<Show
 						when={!diagnostics.loading && diagnostics()}
 						fallback={
 							<p class="text-xs leading-relaxed text-gray-10">
-								Loading system information...
+								{t("settings.loadingSystemInformation")}
 							</p>
 						}
 					>

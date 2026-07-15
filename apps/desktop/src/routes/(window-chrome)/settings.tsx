@@ -18,6 +18,7 @@ import {
 } from "solid-js";
 import { CapErrorBoundary } from "~/components/CapErrorBoundary";
 import { SignInButton } from "~/components/SignInButton";
+import { useI18n } from "~/i18n";
 
 import { authStore, userProfileStore } from "~/store";
 import { trackEvent } from "~/utils/analytics";
@@ -131,6 +132,7 @@ function SettingsContentSkeleton() {
 }
 
 export default function Settings(props: RouteSectionProps) {
+	const { t } = useI18n();
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	const signIn = createSignInMutation();
@@ -194,68 +196,68 @@ export default function Settings(props: RouteSectionProps) {
 	const settingsItems = [
 		{
 			href: "general",
-			name: "General",
+			name: t("settings.general"),
 			icon: IconCapSettings,
 		},
 		{
 			href: "hotkeys",
-			name: "Shortcuts",
+			name: t("settings.shortcuts"),
 			icon: IconCapHotkeys,
 		},
 		{
 			href: "cli",
-			name: "CLI",
+			name: t("settings.cli"),
 			icon: IconLucideTerminal,
 		},
 		{
 			href: "recordings",
-			name: "Recordings",
+			name: t("settings.recordings"),
 			icon: IconLucideSquarePlay,
 		},
 		{
 			href: "screenshots",
-			name: "Screenshots",
+			name: t("settings.screenshots"),
 			icon: IconLucideImage,
 		},
 		{
 			href: "automations",
-			name: "Automations",
+			name: t("settings.automations"),
 			icon: IconLucideZap,
 		},
 		{
 			href: "transcription",
-			name: "Transcription",
+			name: t("settings.transcription"),
 			icon: IconCapCaptions,
 		},
 		{
 			href: "integrations",
-			name: "Integrations",
+			name: t("settings.integrations"),
 			icon: IconLucideUnplug,
 		},
 		{
 			href: "license",
-			name: "License",
+			name: t("settings.license"),
 			icon: IconLucideGift,
 		},
 		{
 			href: "experimental",
-			name: "Experimental",
+			name: t("settings.experimental"),
 			icon: IconCapSettings,
 		},
 		{
 			href: "feedback",
-			name: "Feedback",
+			name: t("settings.feedback"),
 			icon: IconLucideMessageSquarePlus,
 		},
 		{
 			href: "changelog",
-			name: "Changelog",
+			name: t("settings.changelog"),
 			icon: IconLucideBell,
 		},
 	];
 	const accountName = createMemo(() => {
-		if (!auth()) return "Click to sign in";
-		if (!userProfile.isSuccess) return "Signed in";
+		if (!auth()) return t("settings.clickToSignIn");
+		if (!userProfile.isSuccess) return t("settings.signedIn");
 
 		const name = userProfile.data?.name?.trim();
 		if (name) return name;
@@ -263,7 +265,7 @@ export default function Settings(props: RouteSectionProps) {
 		const email = userProfile.data?.email?.trim();
 		if (email) return email;
 
-		return "Signed in";
+		return t("settings.signedIn");
 	});
 	const accountRemoteImageUrl = createMemo(() => {
 		if (!userProfile.isSuccess) return null;
@@ -413,29 +415,31 @@ export default function Settings(props: RouteSectionProps) {
 			const update = await commands.updatesCheck();
 
 			if (!update) {
-				await dialog.message(
-					"You're already using the latest version of Cap.",
-					{
-						title: "No Update Available",
-						kind: "info",
-					},
-				);
+				await dialog.message(t("settings.noUpdateMessage"), {
+					title: t("settings.noUpdate"),
+					kind: "info",
+				});
 				return;
 			}
 
 			const shouldUpdate = await dialog.confirm(
-				`Version ${update.version} of Cap is available, would you like to install it?`,
-				{ title: "Update Cap", okLabel: "Update", cancelLabel: "Ignore" },
+				t("settings.updateAvailable", { version: update.version }),
+				{
+					title: t("settings.updateCap"),
+					okLabel: t("settings.update"),
+					cancelLabel: t("settings.ignore"),
+				},
 			);
 
 			if (shouldUpdate) navigate("/update");
 		} catch (e) {
 			console.error("Failed to check for updates:", e);
 			const openDownload = await dialog
-				.confirm(
-					"Couldn't check for updates automatically. You can download the latest version of Cap from cap.so/download \u2014 your data won't be lost.",
-					{ title: "Update Cap", okLabel: "Download", cancelLabel: "Later" },
-				)
+				.confirm(t("settings.updateCheckFailed"), {
+					title: t("settings.updateCap"),
+					okLabel: t("settings.download"),
+					cancelLabel: t("settings.later"),
+				})
 				.catch(() => false);
 			if (openDownload) await shell.open("https://cap.so/download");
 		} finally {
@@ -483,7 +487,7 @@ export default function Settings(props: RouteSectionProps) {
 							{accountName()}
 						</p>
 						<p class="h-[13px] truncate text-[11px] leading-[13px] text-gray-10">
-							Account
+							{t("settings.account")}
 						</p>
 					</div>
 				</button>
@@ -516,7 +520,7 @@ export default function Settings(props: RouteSectionProps) {
 											shell.open("https://cap.so/download/versions")
 										}
 									>
-										View previous versions
+										{t("settings.viewPreviousVersions")}
 									</button>
 									<button
 										type="button"
@@ -525,8 +529,8 @@ export default function Settings(props: RouteSectionProps) {
 										onClick={checkForUpdates}
 									>
 										{isCheckingForUpdates()
-											? "Checking..."
-											: "Check for updates"}
+											? t("settings.checkingForUpdates")
+											: t("settings.checkForUpdates")}
 									</button>
 								</div>
 							</div>
@@ -540,10 +544,10 @@ export default function Settings(props: RouteSectionProps) {
 					>
 						{auth() ? (
 							<Button onClick={handleAuth} variant="gray" class="w-full">
-								Sign Out
+								{t("settings.signOut")}
 							</Button>
 						) : (
-							<SignInButton>Sign In</SignInButton>
+							<SignInButton>{t("settings.signIn")}</SignInButton>
 						)}
 					</Show>
 				</div>

@@ -1,5 +1,6 @@
 import { type as ostype } from "@tauri-apps/plugin-os";
 import { Match, Show, Switch } from "solid-js";
+import { useI18n } from "~/i18n";
 
 export type SelectionHintProps = {
 	show: boolean;
@@ -9,6 +10,7 @@ export type SelectionHintProps = {
 
 export default function SelectionHint(props: SelectionHintProps) {
 	const os = ostype();
+	const { t } = useI18n();
 
 	return (
 		<Show when={props.show}>
@@ -38,7 +40,7 @@ export default function SelectionHint(props: SelectionHintProps) {
 						</div>
 					</div>
 					<p class="text-base font-medium max-w-xs">
-						{props.message ?? "Click and drag to select an area"}
+						{props.message ?? t("target.selectionHint")}
 					</p>
 				</div>
 			</div>

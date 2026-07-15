@@ -21,6 +21,7 @@ import {
 } from "solid-js";
 import { createStore } from "solid-js/store";
 import { Transition } from "solid-transition-group";
+import { useI18n } from "~/i18n";
 import { createKeyDownSignal } from "~/utils/events";
 
 import { commands } from "~/utils/tauri";
@@ -261,6 +262,7 @@ export function Cropper(
 		allowLightMode?: boolean;
 	}>,
 ) {
+	const { t } = useI18n();
 	let containerRef: HTMLDivElement | undefined;
 	let regionRef: HTMLDivElement | undefined;
 	let occTopRef: HTMLDivElement | undefined;
@@ -1328,7 +1330,9 @@ export function Cropper(
 									}
 									onDblClick={[onHandleDoubleClick, handle]}
 									onPointerDown={[onHandlePointerDown, handle]}
-									aria-label={`Resize ${handle.direction}`}
+									aria-label={t("cropper.resize", {
+										direction: handle.direction,
+									})}
 									aria-describedby="cropper-aspect"
 								>
 									<svg
@@ -1414,7 +1418,9 @@ export function Cropper(
 									}
 									onDblClick={[onHandleDoubleClick, handle]}
 									onPointerDown={[onHandlePointerDown, handle]}
-									aria-label={`Resize ${handle.direction}`}
+									aria-label={t("cropper.resize", {
+										direction: handle.direction,
+									})}
 									aria-describedby="cropper-aspect"
 								/>
 							)
@@ -1431,7 +1437,9 @@ export function Cropper(
 								<button
 									type="button"
 									tabIndex={props.onAspectLabelClick ? 0 : -1}
-									aria-label={`Choose crop ratio, currently ${bounds[0]}:${bounds[1]}`}
+									aria-label={t("cropper.chooseRatio", {
+										ratio: `${bounds[0]}:${bounds[1]}`,
+									})}
 									class="h-[18px] w-11 rounded-full text-center text-xs text-gray-12 border border-white/70 dark:border-white/20 drop-shadow-md outline-1 outline-solid outline-black/80"
 									classList={{
 										"backdrop-blur-xs bg-white/50 dark:bg-black/50 dark:backdrop-brightness-90 backdrop-brightness-200":
@@ -1455,7 +1463,7 @@ export function Cropper(
 				<button
 					type="button"
 					class="absolute inset-0 z-20 bg-transparent p-0 m-0 border-0"
-					aria-label="Start selection"
+					aria-label={t("cropper.startSelection")}
 					onPointerDown={onOverlayPointerDown}
 					style={{ cursor: cursorStyle() ?? "crosshair" }}
 				/>
@@ -1693,10 +1701,11 @@ export function createCropOptionsMenuItems(options: {
 	snapToRatioEnabled: boolean;
 	onAspectSet: (aspect: Ratio | null) => void;
 	onSnapToRatioSet: (enabled: boolean) => void;
+	labels?: { free: string; snapToRatios: string };
 }) {
 	return [
 		{
-			text: "Free",
+			text: options.labels?.free ?? "Free",
 			checked: !options.aspect,
 			action: () => options.onAspectSet(null),
 		} satisfies CheckMenuItemOptions,
@@ -1711,7 +1720,7 @@ export function createCropOptionsMenuItems(options: {
 		),
 		{ item: "Separator" } satisfies PredefinedMenuItemOptions,
 		{
-			text: "Snap to ratios",
+			text: options.labels?.snapToRatios ?? "Snap to ratios",
 			checked: options.snapToRatioEnabled,
 			action: () => options.onSnapToRatioSet(!options.snapToRatioEnabled),
 		} satisfies CheckMenuItemOptions,

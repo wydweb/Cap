@@ -25,6 +25,12 @@ describe("desktop i18n", () => {
 
 	it("translates messages and interpolates parameters", () => {
 		expect(translate("zh-CN", "common.cancel")).toBe("取消");
+		expect(
+			translate("zh-CN", "target.minimumSize", {
+				width: 150,
+				height: 150,
+			}),
+		).toBe("最小尺寸为 150 × 150");
 		expect(translate("en", "common.error", { unused: "ignored" })).toBe(
 			"Error",
 		);

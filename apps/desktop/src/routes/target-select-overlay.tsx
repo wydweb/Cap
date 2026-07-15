@@ -51,6 +51,7 @@ import {
 } from "~/components/Cropper";
 import ModeSelect from "~/components/ModeSelect";
 import SelectionHint from "~/components/selection-hint";
+import { useI18n } from "~/i18n";
 import { authStore, generalSettingsStore } from "~/store";
 import { getCameraWindow } from "~/utils/camera-window";
 import { createDevicesQuery } from "~/utils/devices";
@@ -173,6 +174,7 @@ function useOptions() {
 }
 
 function Inner() {
+	const { t } = useI18n();
 	const [params] = useSearchParams<{
 		displayId: DisplayId;
 		isHoveredDisplay: string;
@@ -365,9 +367,11 @@ function Inner() {
 				<div class="relative w-screen h-screen flex flex-col items-center justify-center bg-black/70">
 					<div class="absolute inset-0 bg-black/60 -z-10" />
 					<div class="flex flex-col items-center text-white mb-4">
-						<span class="mb-2 text-3xl font-semibold">Camera Only</span>
+						<span class="mb-2 text-3xl font-semibold">
+							{t("target.cameraOnly")}
+						</span>
 						<span class="text-xs text-gray-11">
-							Record using only your camera and microphone
+							{t("target.cameraOnlyDescription")}
 						</span>
 					</div>
 					<div class="flex justify-center w-full px-6 mb-4">
@@ -400,7 +404,7 @@ function Inner() {
 								<div class="flex flex-col items-center text-white">
 									<IconCapMonitor class="size-20 mb-3" />
 									<span class="mb-2 text-3xl font-semibold">
-										{display.name || "Monitor"}
+										{display.name || t("target.monitor")}
 									</span>
 									<Show when={display.physical_size}>
 										{(size) => (
@@ -647,7 +651,9 @@ function Inner() {
 														{(icon) => (
 															<img
 																src={icon()}
-																alt={`${windowUnderCursor.app_name} icon`}
+																alt={t("target.windowIcon", {
+																	app: windowUnderCursor.app_name,
+																})}
 																class="mb-3 w-full h-full rounded-lg animate-in fade-in"
 															/>
 														)}
@@ -740,7 +746,7 @@ function Inner() {
 												});
 											}}
 										>
-											Adjust recording area
+											{t("target.adjustRecordingArea")}
 										</Button>
 										<ShowCapFreeWarning
 											isInstantMode={options.mode === "instant"}
@@ -1064,6 +1070,10 @@ function Inner() {
 							snapToRatioEnabled: areaSnapToRatio(),
 							onAspectSet: setAreaAspect,
 							onSnapToRatioSet: setAreaSnapToRatio,
+							labels: {
+								free: t("cropper.free"),
+								snapToRatios: t("cropper.snapToRatios"),
+							},
 						});
 						const menu = await Menu.new({ items });
 						await menu.popup(new LogicalPosition(rect.left, rect.bottom + 6));
@@ -1211,7 +1221,7 @@ function Inner() {
 									await commands.closeTargetSelectOverlays();
 								} catch (e) {
 									const message = e instanceof Error ? e.message : String(e);
-									toast.error(`Failed to take screenshot: ${message}`);
+									toast.error(t("target.screenshotFailed", { message }));
 									console.error("Failed to take screenshot", e);
 								}
 							}
@@ -1266,13 +1276,16 @@ function Inner() {
 									<Show when={!isValid()}>
 										<div class="flex flex-col gap-1 items-center p-2.5 my-2 rounded-xl border min-w-fit w-fit bg-red-2 shadow-xs border-red-4 text-sm">
 											<p>
-												Minimum size is {minSize().width} x {minSize().height}
+												{t("target.minimumSize", {
+													width: minSize().width,
+													height: minSize().height,
+												})}
 											</p>
 											<small>
-												<code>
-													{crop().width} x {crop().height}
-												</code>{" "}
-												is too small
+												{t("target.currentSizeTooSmall", {
+													width: crop().width,
+													height: crop().height,
+												})}
 											</small>
 										</div>
 									</Show>
@@ -1353,6 +1366,7 @@ function calculateBackoffWithJitter(
 const WS_STALL_TIMEOUT_MS = 2000;
 
 function CameraPreviewInline() {
+	const { t } = useI18n();
 	const { rawOptions } = useRecordingOptions();
 	const [state, setState] = makePersisted(
 		createStore<CameraWindowState>(getDefaultCameraWindowState()),
@@ -1636,7 +1650,9 @@ function CameraPreviewInline() {
 						fallback={
 							<div class="flex flex-col items-center gap-2 text-center px-4">
 								<IconCapCamera class="size-8 text-gray-9 mb-2" />
-								<div class="text-sm text-gray-11">Please select a camera</div>
+								<div class="text-sm text-gray-11">
+									{t("target.selectCamera")}
+								</div>
 							</div>
 						}
 					>
@@ -1666,7 +1682,9 @@ function CameraPreviewInline() {
 								style={canvasStyle()}
 							/>
 							<Show when={!hasFrame()}>
-								<div class="text-sm text-gray-11">Loading camera...</div>
+								<div class="text-sm text-gray-11">
+									{t("target.loadingCamera")}
+								</div>
 							</Show>
 						</Show>
 					</Show>

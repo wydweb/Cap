@@ -42,6 +42,8 @@ mod screenshot_editor;
 mod target_select_overlay;
 mod thumbnails;
 mod tray;
+#[cfg(target_os = "windows")]
+mod ui_element_detection;
 mod update_project_names;
 mod updates;
 mod upload;

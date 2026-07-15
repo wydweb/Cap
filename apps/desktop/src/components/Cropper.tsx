@@ -235,6 +235,7 @@ export function Cropper(
 	props: ParentProps<{
 		onCropChange?: (bounds: CropBounds) => void;
 		onInteraction?: (interacting: boolean) => void;
+		onOverlayClick?: () => CropBounds | undefined;
 		onContextMenu?: (event: PointerEvent) => void;
 		ref?: CropperRef | ((ref: CropperRef) => void);
 		class?: string;
@@ -640,6 +641,14 @@ export function Cropper(
 		}
 	});
 
+	function applyOverlayClick() {
+		const clickedBounds = props.onOverlayClick?.();
+		if (!clickedBounds) return false;
+		setAspectState({ snapped: null, value: null });
+		setRawBoundsConstraining(boundsToRaw(clickedBounds));
+		return true;
+	}
+
 	function onRegionPointerDown(e: PointerEvent) {
 		if (!containerRef || e.button !== 0) return;
 
@@ -650,6 +659,8 @@ export function Cropper(
 		setMouseState({ drag: "region" });
 		let currentBounds = rawBounds();
 		const containerRect = containerRef.getBoundingClientRect();
+		const startPoint = { x: e.clientX, y: e.clientY };
+		let moved = false;
 		const startOffset = {
 			x: e.clientX - containerRect.left - currentBounds.x,
 			y: e.clientY - containerRect.top - currentBounds.y,
@@ -659,6 +670,13 @@ export function Cropper(
 			target,
 			e.pointerId,
 			(e) => {
+				if (
+					!moved &&
+					Math.abs(e.clientX - startPoint.x) < 5 &&
+					Math.abs(e.clientY - startPoint.y) < 5
+				)
+					return;
+				moved = true;
 				let newX = e.clientX - containerRect.left - startOffset.x;
 				let newY = e.clientY - containerRect.top - startOffset.y;
 
@@ -671,6 +689,7 @@ export function Cropper(
 				if (!isAnimating()) setDisplayRawBounds(currentBounds);
 			},
 			() => {
+				if (!moved) applyOverlayClick();
 				setMouseState({ drag: null });
 			},
 		);
@@ -926,18 +945,36 @@ export function Cropper(
 			activeHandle: { ...handle },
 			originalHandle: handle,
 		};
+		let moved = false;
 
 		trackPointerSession(
 			target,
 			e.pointerId,
-			(e) => handleResizePointerMove(e, context),
+			(e) => {
+				if (
+					!moved &&
+					Math.abs(e.clientX - containerRect.left - startPoint.x) < 5 &&
+					Math.abs(e.clientY - containerRect.top - startPoint.y) < 5
+				)
+					return;
+				moved = true;
+				handleResizePointerMove(e, context);
+			},
 			() => {
-				setMouseState({ drag: null });
-				const bounds = rawBounds();
-				if (bounds.width < 5 || bounds.height < 5) {
+				if (!moved && applyOverlayClick()) {
+					setMouseState({ drag: null });
+					return;
+				}
+				if (moved) {
+					const bounds = rawBounds();
+					if (bounds.width >= 5 && bounds.height >= 5) {
+						setMouseState({ drag: null });
+						return;
+					}
 					setRawBounds(initialBounds);
 					if (!isAnimating()) setDisplayRawBounds(initialBounds);
 				}
+				setMouseState({ drag: null });
 			},
 		);
 	}

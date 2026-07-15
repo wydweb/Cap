@@ -31,6 +31,7 @@ use tracing::{debug, error, instrument};
 pub struct TargetUnderCursor {
     display_id: Option<DisplayId>,
     window: Option<WindowUnderCursor>,
+    element_bounds: Vec<LogicalBounds>,
 }
 
 #[derive(Serialize, Type, Clone)]
@@ -164,9 +165,16 @@ pub async fn open_target_select_overlays(
 
     let handle = tokio::spawn({
         let app = app.clone();
+        #[cfg(target_os = "windows")]
+        let detect_ui_elements = matches!(target_mode, Some(RecordingTargetMode::Area));
 
         async move {
-            while let Some((display, window)) = read_target_under_cursor(
+            #[cfg(target_os = "windows")]
+            let element_detector = detect_ui_elements
+                .then(crate::ui_element_detection::UiElementDetector::new)
+                .flatten();
+
+            while let Some((display_id, window, element_query)) = read_target_under_cursor(
                 || crate::app_is_exiting(&app),
                 || {
                     focused_target
@@ -180,20 +188,58 @@ pub async fn open_target_select_overlays(
                         .map(|v| v.window().and_then(|id| scap_targets::Window::from_id(&id)))
                         .unwrap_or_else(scap_targets::Window::get_topmost_at_cursor)
                 },
-            ) {
-                let _ = TargetUnderCursor {
-                    display_id: display.map(|d| d.id()),
-                    window: window.and_then(|w| {
-                        if should_skip_window(&w, &window_exclusions) {
-                            return None;
-                        }
+            )
+            .map(|(display, source_window)| {
+                let display_id = display.map(|display| display.id());
+                let (window, element_query) = match source_window {
+                    Some(window) if !should_skip_window(&window, &window_exclusions) => {
+                        #[cfg(target_os = "windows")]
+                        let element_query = detect_ui_elements.then(|| {
+                            display.and_then(|display| {
+                                crate::ui_element_detection::UiElementDetector::query(
+                                    window, display,
+                                )
+                            })
+                        });
 
-                        Some(WindowUnderCursor {
-                            id: w.id(),
-                            bounds: w.display_relative_logical_bounds()?,
-                            app_name: w.owner_name()?,
-                        })
-                    }),
+                        #[cfg(target_os = "windows")]
+                        let element_query = element_query.flatten();
+
+                        #[cfg(not(target_os = "windows"))]
+                        let element_query = None::<()>;
+
+                        let window_under_cursor = window
+                            .display_relative_logical_bounds()
+                            .zip(window.owner_name())
+                            .map(|(bounds, app_name)| WindowUnderCursor {
+                                id: window.id(),
+                                bounds,
+                                app_name,
+                            });
+
+                        (window_under_cursor, element_query)
+                    }
+                    _ => (None, None),
+                };
+
+                (display_id, window, element_query)
+            }) {
+                #[cfg(not(target_os = "windows"))]
+                let _ = element_query;
+
+                #[cfg(target_os = "windows")]
+                let element_bounds = match (element_detector.as_ref(), element_query) {
+                    (Some(detector), Some(query)) => detector.detect(query).await,
+                    _ => vec![],
+                };
+
+                #[cfg(not(target_os = "windows"))]
+                let element_bounds = vec![];
+
+                let _ = TargetUnderCursor {
+                    display_id,
+                    window,
+                    element_bounds,
                 }
                 .emit(&app);
 

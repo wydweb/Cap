@@ -85,6 +85,11 @@ import {
 	RecordingOptionsProvider,
 	useRecordingOptions,
 } from "./(window-chrome)/OptionsContext";
+import {
+	buildElementCandidates,
+	cycleElementLevel,
+	elementCandidateSignature,
+} from "./element-selection";
 
 const MIN_SIZE = { width: 150, height: 150 };
 const MIN_SCREENSHOT_SIZE = { width: 1, height: 1 };
@@ -190,6 +195,7 @@ function Inner() {
 		createStore<TargetUnderCursor>({
 			display_id: null,
 			window: null,
+			element_bounds: [],
 		});
 
 	const unsubTargetUnderCursor = events.targetUnderCursor.listen((event) => {
@@ -309,7 +315,9 @@ function Inner() {
 
 	createEffect(() => {
 		if (!options.targetMode) {
-			setTargetUnderCursor(reconcile({ display_id: null, window: null }));
+			setTargetUnderCursor(
+				reconcile({ display_id: null, window: null, element_bounds: [] }),
+			);
 		}
 	});
 
@@ -797,6 +805,36 @@ function Inner() {
 
 					const minSize = () =>
 						options.mode === "screenshot" ? MIN_SCREENSHOT_SIZE : MIN_SIZE;
+					const [elementLevel, setElementLevel] = createSignal(0);
+					const elementCandidates = createMemo(() => {
+						if (!isActiveDisplay()) return [];
+						return buildElementCandidates(
+							targetUnderCursor.element_bounds,
+							targetUnderCursor.window?.bounds,
+							minSize(),
+						);
+					});
+					const selectedElementCandidate = createMemo(() => {
+						const candidates = elementCandidates();
+						return candidates[Math.min(elementLevel(), candidates.length - 1)];
+					});
+					let previousElementSignature = "";
+					createEffect(() => {
+						const signature = elementCandidateSignature(elementCandidates());
+						if (signature === previousElementSignature) return;
+						previousElementSignature = signature;
+						setElementLevel(0);
+					});
+
+					function handleElementWheel(event: WheelEvent) {
+						const candidates = elementCandidates();
+						if (isInteracting() || candidates.length === 0) return;
+						event.preventDefault();
+						event.stopPropagation();
+						setElementLevel((level) =>
+							cycleElementLevel(level, event.deltaY, candidates.length),
+						);
+					}
 
 					const isValid = createMemo(() => {
 						const b = crop();
@@ -1171,6 +1209,7 @@ function Inner() {
 							classList={{
 								"opacity-0 pointer-events-none": !shouldShowOverlay(),
 							}}
+							onWheel={handleElementWheel}
 						>
 							<div
 								ref={controlsEl}
@@ -1232,9 +1271,31 @@ function Inner() {
 
 							<SelectionHint show={shouldShowSelectionHint()} />
 
+							<Show
+								when={!isInteracting() ? selectedElementCandidate() : undefined}
+								keyed
+							>
+								{(bounds) => (
+									<div
+										class="fixed pointer-events-none z-30 border-2 border-blue-9 rounded-sm shadow-sm"
+										style={{
+											left: `${bounds.x}px`,
+											top: `${bounds.y}px`,
+											width: `${bounds.width}px`,
+											height: `${bounds.height}px`,
+										}}
+									/>
+								)}
+							</Show>
+
 							<Cropper
 								ref={cropperRef}
 								onInteraction={setIsInteracting}
+								onOverlayClick={() => {
+									const candidate = selectedElementCandidate();
+									if (candidate) setAspect(null);
+									return candidate;
+								}}
 								onCropChange={setCrop}
 								initialCrop={() => initialAreaBounds() ?? CROP_ZERO}
 								showBounds={isValid()}

@@ -16,6 +16,7 @@ import {
 import Tooltip from "~/components/Tooltip";
 import CaptionControlsMacOS from "~/components/titlebar/controls/CaptionControlsMacOS";
 import CaptionControlsWindows11 from "~/components/titlebar/controls/CaptionControlsWindows11";
+import { useI18n } from "~/i18n";
 import { trackEvent } from "~/utils/analytics";
 import { commands } from "~/utils/tauri";
 import { initializeTitlebar } from "~/utils/titlebar-state";
@@ -45,6 +46,7 @@ export interface ExportEstimates {
 }
 
 export function Header() {
+	const { t } = useI18n();
 	const {
 		editorInstance,
 		project,
@@ -101,12 +103,11 @@ export function Header() {
 					onClick={async () => {
 						clearTimelineSelection();
 
-						if (!(await ask("Are you sure you want to delete this recording?")))
-							return;
+						if (!(await ask(t("editor.deleteRecordingConfirm")))) return;
 
 						await commands.editorDeleteProject();
 					}}
-					tooltipText="Delete recording"
+					tooltipText={t("editor.deleteRecording")}
 					leftIcon={<IconCapTrash class="w-5" />}
 				/>
 				<EditorButton
@@ -116,7 +117,7 @@ export function Header() {
 						console.log({ path: `${editorInstance.path}/` });
 						revealItemInDir(`${editorInstance.path}/`);
 					}}
-					tooltipText="Open recording bundle"
+					tooltipText={t("editor.openRecordingBundle")}
 					leftIcon={<IconLucideFolder class="w-5" />}
 				/>
 
@@ -151,7 +152,7 @@ export function Header() {
 					disabled={
 						!projectHistory.canUndo() && !editorState.timeline.selection
 					}
-					tooltipText="Undo"
+					tooltipText={t("editor.undo")}
 					leftIcon={<IconCapUndo class="w-5" />}
 				/>
 				<EditorButton
@@ -163,7 +164,7 @@ export function Header() {
 					disabled={
 						!projectHistory.canRedo() && !editorState.timeline.selection
 					}
-					tooltipText="Redo"
+					tooltipText={t("editor.redo")}
 					leftIcon={<IconCapRedo class="w-5" />}
 				/>
 				<div data-tauri-drag-region class="flex-1 h-full" />
@@ -183,7 +184,7 @@ export function Header() {
 					}}
 				>
 					<IconCapClapperboard class="size-4" />
-					Clips
+					{t("editor.clips")}
 				</Button>
 				<Show when={hasTranscript()}>
 					<Button
@@ -204,7 +205,7 @@ export function Header() {
 						>
 							<IconLucideArrowLeft class="size-4" />
 						</Show>
-						{isTranscriptOpen() ? "Back" : "Captions"}
+						{isTranscriptOpen() ? t("editor.back") : t("editor.captions")}
 					</Button>
 				</Show>
 				<button
@@ -227,7 +228,7 @@ export function Header() {
 					}}
 				>
 					<UploadIcon class="size-4" />
-					Export
+					{t("editor.export")}
 				</button>
 				{ostype() === "windows" && <CaptionControlsWindows11 />}
 			</div>

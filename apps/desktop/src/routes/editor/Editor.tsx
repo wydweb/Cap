@@ -38,6 +38,7 @@ import {
 	type Ratio,
 } from "~/components/Cropper";
 import { Toggle } from "~/components/Toggle";
+import { useI18n } from "~/i18n";
 import { composeEventHandlers } from "~/utils/composeEventHandlers";
 import { createTauriEventListener } from "~/utils/createEventListener";
 import { commands, events } from "~/utils/tauri";
@@ -292,6 +293,7 @@ function EditorContent(props: { projectPath: string }) {
 }
 
 function Inner() {
+	const { t } = useI18n();
 	const {
 		project,
 		editorInstance,
@@ -310,7 +312,7 @@ function Inner() {
 	});
 
 	const appendRecordedClip = async (recordingPath: string) => {
-		const toastId = toast.loading("Adding clip…");
+		const toastId = toast.loading(t("editor.addingClip"));
 		try {
 			if (editorState.playing) {
 				await commands.stopPlayback();
@@ -319,11 +321,11 @@ function Inner() {
 			await commands.setProjectConfig(serializeProjectConfiguration(project));
 			await commands.addExistingRecordingToEditor(recordingPath);
 			await commands.deleteRecordingDirectory(recordingPath).catch(() => {});
-			toast.success("Clip added", { id: toastId });
+			toast.success(t("editor.clipAdded"), { id: toastId });
 			window.location.reload();
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			toast.error(`Failed to add clip: ${message}`, { id: toastId });
+			toast.error(t("editor.failedToAddClip", { message }), { id: toastId });
 		}
 	};
 
@@ -701,7 +703,7 @@ function Inner() {
 											"bg-gray-3/55 dark:bg-gray-4/50": isResizingTimeline(),
 										}}
 										onMouseDown={handleTimelineResizeStart}
-										aria-label="Resize timeline height"
+										aria-label={t("editor.resizeTimeline")}
 									>
 										<For each={TIMELINE_RESIZE_GRIP_MARKS}>
 											{() => (
@@ -743,7 +745,7 @@ function Inner() {
 									class="flex-none flex items-center justify-center cursor-col-resize select-none group z-10"
 									style={{ width: "12px" }}
 									onMouseDown={handleSplitResizeStart}
-									aria-label="Resize captions panel"
+									aria-label={t("editor.resizeCaptions")}
 									role="separator"
 									aria-orientation="vertical"
 								>
@@ -788,6 +790,7 @@ function Inner() {
 }
 
 function Dialogs() {
+	const { t } = useI18n();
 	const { dialog, setDialog, presets, project } = useEditorContext();
 
 	const isDialogType = () => isModalDialog(dialog());
@@ -832,7 +835,7 @@ function Dialogs() {
 
 								return (
 									<DialogContent
-										title="Create Preset"
+										title={t("editor.createPreset")}
 										confirm={
 											<Dialog.ConfirmButton
 												disabled={createPreset.isPending}
@@ -842,14 +845,14 @@ function Dialogs() {
 											</Dialog.ConfirmButton>
 										}
 									>
-										<Subfield name="Name" required />
+										<Subfield name={t("editor.name")} required />
 										<Input
 											class="mt-2"
 											value={form.name}
-											placeholder="Enter preset name..."
+											placeholder={t("editor.presetNamePlaceholder")}
 											onInput={(e) => setForm("name", e.currentTarget.value)}
 										/>
-										<Subfield name="Set as default" class="mt-4">
+										<Subfield name={t("editor.setAsDefault")} class="mt-4">
 											<Toggle
 												checked={form.default}
 												onChange={(checked) => setForm("default", checked)}
@@ -880,7 +883,7 @@ function Dialogs() {
 
 								return (
 									<DialogContent
-										title="Rename Preset"
+										title={t("editor.renamePreset")}
 										confirm={
 											<Dialog.ConfirmButton
 												disabled={renamePreset.isPending}
@@ -890,7 +893,7 @@ function Dialogs() {
 											</Dialog.ConfirmButton>
 										}
 									>
-										<Subfield name="Name" required />
+										<Subfield name={t("editor.name")} required />
 										<Input
 											class="mt-2"
 											value={name()}
@@ -919,7 +922,7 @@ function Dialogs() {
 
 								return (
 									<DialogContent
-										title="Delete Preset"
+										title={t("editor.deletePreset")}
 										confirm={
 											<Dialog.ConfirmButton
 												variant="destructive"

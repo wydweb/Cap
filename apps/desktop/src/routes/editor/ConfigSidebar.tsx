@@ -46,6 +46,7 @@ import gradientBg from "~/assets/illustrations/gradient.webp";
 import imageBg from "~/assets/illustrations/image.webp";
 import transparentBg from "~/assets/illustrations/transparent.webp";
 import { Toggle } from "~/components/Toggle";
+import { useI18n } from "~/i18n";
 import { generalSettingsStore } from "~/store";
 import { normalizeOpaqueHexColor } from "~/utils/hex-color";
 import {
@@ -422,6 +423,7 @@ const TAB_IDS = {
 } as const;
 
 export function ConfigSidebar() {
+	const { t } = useI18n();
 	const {
 		project,
 		setProject,
@@ -606,17 +608,17 @@ export function ConfigSidebar() {
 					class="flex flex-col flex-1 gap-6 p-4 min-h-0"
 				>
 					<Field
-						name="Audio Controls"
+						name={t("editor.audioControls")}
 						icon={<IconLucideVolume2 class="size-4" />}
 					>
-						<Subfield name="Mute Audio">
+						<Subfield name={t("editor.muteAudio")}>
 							<Toggle
 								checked={project.audio.mute}
 								onChange={(v) => setProject("audio", "mute", v)}
 							/>
 						</Subfield>
 						{editorInstance.recordings.segments[0].mic?.channels === 2 && (
-							<Subfield name="Microphone Stereo Mode">
+							<Subfield name={t("editor.microphoneStereoMode")}>
 								<KSelect<{ name: string; value: StereoMode }>
 									options={STEREO_MODES}
 									optionValue="value"
@@ -685,7 +687,7 @@ export function ConfigSidebar() {
 					</Field>
 					{meta().hasMicrophone && (
 						<Field
-							name="Microphone Volume"
+							name={t("editor.microphoneVolume")}
 							icon={<IconCapMicrophone class="size-4" />}
 						>
 							<Slider
@@ -703,7 +705,7 @@ export function ConfigSidebar() {
 					)}
 					{meta().hasSystemAudio && (
 						<Field
-							name="System Audio Volume"
+							name={t("editor.systemAudioVolume")}
 							icon={<IconLucideMonitor class="size-4" />}
 						>
 							<Slider
@@ -725,7 +727,7 @@ export function ConfigSidebar() {
 					class="flex flex-col flex-1 gap-6 p-4 min-h-0"
 				>
 					<Field
-						name="Show cursor"
+						name={t("editor.showCursor")}
 						value={
 							<Toggle
 								checked={!project.cursor.hide}
@@ -736,7 +738,7 @@ export function ConfigSidebar() {
 						}
 					/>
 					<Show when={!project.cursor.hide}>
-						<Field name="Cursor Type" icon={<IconCapCursor />}>
+						<Field name={t("editor.cursorType")} icon={<IconCapCursor />}>
 							<RadioGroup
 								class="flex flex-col gap-2"
 								value={project.cursor.type}
@@ -765,7 +767,7 @@ export function ConfigSidebar() {
 								))}
 							</RadioGroup>
 						</Field>
-						<Field name="Size" icon={<IconCapEnlarge />}>
+						<Field name={t("editor.size")} icon={<IconCapEnlarge />}>
 							<Slider
 								value={[project.cursor.size]}
 								onChange={(v) => setProject("cursor", "size", v[0])}
@@ -774,7 +776,10 @@ export function ConfigSidebar() {
 								step={1}
 							/>
 						</Field>
-						<Field name="Tilt" icon={<IconLucideRotate3d class="size-4" />}>
+						<Field
+							name={t("editor.tilt")}
+							icon={<IconLucideRotate3d class="size-4" />}
+						>
 							<Slider
 								value={[project.cursor.rotationAmount ?? 0.15]}
 								onChange={(v) => setProject("cursor", "rotationAmount", v[0])}
@@ -785,7 +790,7 @@ export function ConfigSidebar() {
 							/>
 						</Field>
 						<Field
-							name="Hide When Idle"
+							name={t("editor.hideWhenIdle")}
 							icon={<IconLucideTimer class="size-4" />}
 							value={
 								<Toggle
@@ -797,7 +802,10 @@ export function ConfigSidebar() {
 							}
 						/>
 						<Show when={project.cursor.hideWhenIdle}>
-							<Subfield name="Inactivity Delay" class="gap-4 items-center">
+							<Subfield
+								name={t("editor.inactivityDelay")}
+								class="gap-4 items-center"
+							>
 								<div class="flex flex-1 gap-3 items-center">
 									<Slider
 										class="flex-1"
@@ -818,7 +826,7 @@ export function ConfigSidebar() {
 							</Subfield>
 						</Show>
 						<Field
-							name="Cursor Movement Style"
+							name={t("editor.cursorMovementStyle")}
 							icon={<IconLucideRabbit class="size-4" />}
 						>
 							<RadioGroup
@@ -851,7 +859,7 @@ export function ConfigSidebar() {
 						</Field>
 						<KCollapsible open={!project.cursor.raw}>
 							<Field
-								name="Smooth Movement"
+								name={t("editor.smoothMovement")}
 								icon={<IconHugeiconsEaseCurveControlPoints />}
 								value={
 									<Toggle
@@ -956,9 +964,9 @@ export function ConfigSidebar() {
           </Field> */}
 				</KTabs.Content>
 				<KTabs.Content value="hotkeys" class="flex flex-1 p-4 min-h-0">
-					<Field name="Hotkeys" icon={<IconCapHotkeys />}>
+					<Field name={t("editor.hotkeys")} icon={<IconCapHotkeys />}>
 						<ComingSoonTooltip>
-							<Subfield name="Show hotkeys">
+							<Subfield name={t("editor.showHotkeys")}>
 								<Toggle disabled />
 							</Subfield>
 						</ComingSoonTooltip>
@@ -1632,6 +1640,7 @@ function BackgroundConfig(props: {
 	scrollRef: HTMLDivElement;
 	brandColorSwatches: OrganizationBrandColorSwatch[];
 }) {
+	const { t } = useI18n();
 	const { project, setProject, editorInstance, projectHistory } =
 		useEditorContext();
 	const isNoneBackground = () =>
@@ -2044,7 +2053,10 @@ function BackgroundConfig(props: {
 
 	return (
 		<KTabs.Content value={TAB_IDS.background} class="flex flex-col gap-6 p-4">
-			<Field icon={<IconCapImage class="size-4" />} name="Background Image">
+			<Field
+				icon={<IconCapImage class="size-4" />}
+				name={t("editor.backgroundImage")}
+			>
 				<KTabs
 					value={backgroundSourceTab()}
 					onChange={(v) => {
@@ -2493,7 +2505,7 @@ function BackgroundConfig(props: {
 				</KTabs>
 			</Field>
 
-			<Field name="Background Blur" icon={<IconCapBgBlur />}>
+			<Field name={t("editor.backgroundBlur")} icon={<IconCapBgBlur />}>
 				<Slider
 					value={[project.background.blur]}
 					onChange={(v) => setProject("background", "blur", v[0])}
@@ -2505,7 +2517,10 @@ function BackgroundConfig(props: {
 			</Field>
 			{/** Dashed divider */}
 			<div class="w-full border-t border-gray-300 border-dashed" />
-			<Field name="Padding" icon={<IconCapPadding class="size-4" />}>
+			<Field
+				name={t("editor.padding")}
+				icon={<IconCapPadding class="size-4" />}
+			>
 				<Slider
 					value={[project.background.padding]}
 					onChange={(v) => setBackgroundDimension("padding", v[0])}
@@ -2527,7 +2542,10 @@ function BackgroundConfig(props: {
 					</div>
 				</Show>
 			</Field>
-			<Field name="Rounded Corners" icon={<IconCapCorners class="size-4" />}>
+			<Field
+				name={t("editor.roundedCorners")}
+				icon={<IconCapCorners class="size-4" />}
+			>
 				<div class="flex flex-col gap-3">
 					<Slider
 						value={[project.background.rounding]}
@@ -2546,7 +2564,10 @@ function BackgroundConfig(props: {
 					/>
 				</div>
 			</Field>
-			<Field name="Motion Blur" icon={<IconLucideWind class="size-4" />}>
+			<Field
+				name={t("editor.motionBlur")}
+				icon={<IconLucideWind class="size-4" />}
+			>
 				<Slider
 					value={[
 						project.screenMotionBlur ??
@@ -2567,7 +2588,7 @@ function BackgroundConfig(props: {
 				/>
 			</Field>
 			<Field
-				name="Border"
+				name={t("editor.border")}
 				icon={<IconCapSettings class="size-4" />}
 				value={
 					<Toggle
@@ -2670,7 +2691,7 @@ function BackgroundConfig(props: {
 					</div>
 				</KCollapsible.Content>
 			</KCollapsible>
-			<Field name="Shadow" icon={<IconCapShadow class="size-4" />}>
+			<Field name={t("editor.shadow")} icon={<IconCapShadow class="size-4" />}>
 				<Slider
 					value={[project.background.shadow ?? 0]}
 					onChange={(v) => {
@@ -2751,6 +2772,7 @@ function BackgroundConfig(props: {
 }
 
 function CameraConfig(props: { scrollRef: HTMLDivElement }) {
+	const { t } = useI18n();
 	const { project, setProject } = useEditorContext();
 	// A camera dragged on the preview canvas has a manual position; none of
 	// the preset dots match until it is reset.
@@ -2765,10 +2787,10 @@ function CameraConfig(props: { scrollRef: HTMLDivElement }) {
 			value={TAB_IDS.camera}
 			class="flex flex-col flex-1 gap-6 p-4 min-h-0"
 		>
-			<Field icon={<IconCapCamera class="size-4" />} name="Camera">
+			<Field icon={<IconCapCamera class="size-4" />} name={t("editor.camera")}>
 				<div class="flex flex-col gap-6">
 					<div>
-						<Subfield name="Position" />
+						<Subfield name={t("editor.position")} />
 						<KRadioGroup
 							value={cameraPositionValue()}
 							onChange={(v) => {
@@ -2838,19 +2860,19 @@ function CameraConfig(props: { scrollRef: HTMLDivElement }) {
 							</div>
 						</Show>
 					</div>
-					<Subfield name="Hide Camera">
+					<Subfield name={t("editor.hideCamera")}>
 						<Toggle
 							checked={project.camera.hide}
 							onChange={(hide) => setProject("camera", "hide", hide)}
 						/>
 					</Subfield>
-					<Subfield name="Mirror Camera">
+					<Subfield name={t("editor.mirrorCamera")}>
 						<Toggle
 							checked={project.camera.mirror}
 							onChange={(mirror) => setProject("camera", "mirror", mirror)}
 						/>
 					</Subfield>
-					<Subfield name="Background Blur">
+					<Subfield name={t("editor.backgroundBlur")}>
 						<KSelect<{ name: string; value: BackgroundBlurMode }>
 							options={[
 								{ name: "Off", value: "off" },
@@ -2918,7 +2940,7 @@ function CameraConfig(props: { scrollRef: HTMLDivElement }) {
 							</KSelect.Portal>
 						</KSelect>
 					</Subfield>
-					<Subfield name="Shape">
+					<Subfield name={t("editor.shape")}>
 						<KSelect<{ name: string; value: CameraShape }>
 							options={CAMERA_SHAPES}
 							optionValue="value"
@@ -2981,7 +3003,7 @@ function CameraConfig(props: { scrollRef: HTMLDivElement }) {
 			</Field>
 			{/** Dashed divider */}
 			<div class="w-full border-t border-dashed border-gray-5" />
-			<Field name="Size" icon={<IconCapEnlarge class="size-4" />}>
+			<Field name={t("editor.size")} icon={<IconCapEnlarge class="size-4" />}>
 				<Slider
 					value={[project.camera.size]}
 					onChange={(v) => setProject("camera", "size", v[0])}
@@ -2991,7 +3013,10 @@ function CameraConfig(props: { scrollRef: HTMLDivElement }) {
 					formatTooltip="%"
 				/>
 			</Field>
-			<Field name="Size During Zoom" icon={<IconCapEnlarge class="size-4" />}>
+			<Field
+				name={t("editor.sizeDuringZoom")}
+				icon={<IconCapEnlarge class="size-4" />}
+			>
 				<Slider
 					value={[project.camera.zoomSize ?? 60]}
 					onChange={(v) => setProject("camera", "zoomSize", v[0])}
@@ -3016,7 +3041,10 @@ function CameraConfig(props: { scrollRef: HTMLDivElement }) {
 					}
 				/>
 			</Subfield>
-			<Field name="Rounded Corners" icon={<IconCapCorners class="size-4" />}>
+			<Field
+				name={t("editor.roundedCorners")}
+				icon={<IconCapCorners class="size-4" />}
+			>
 				<div class="flex flex-col gap-3">
 					<Slider
 						value={[project.camera.rounding ?? 0]}
@@ -3033,7 +3061,7 @@ function CameraConfig(props: { scrollRef: HTMLDivElement }) {
 					/>
 				</div>
 			</Field>
-			<Field name="Shadow" icon={<IconCapShadow class="size-4" />}>
+			<Field name={t("editor.shadow")} icon={<IconCapShadow class="size-4" />}>
 				<div class="space-y-8">
 					<Slider
 						value={[project.camera.shadow ?? 0]}

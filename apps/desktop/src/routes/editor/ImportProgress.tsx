@@ -1,22 +1,23 @@
 import { Button } from "@cap/ui-solid";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { createSignal, Match, onCleanup, onMount, Switch } from "solid-js";
+import { type MessageKey, useI18n } from "~/i18n";
 import {
 	events,
 	type VideoImportProgress as VideoImportProgressEvent,
 } from "~/utils/tauri";
 import IconLucideAlertCircle from "~icons/lucide/alert-circle";
 
-const funMessages = [
-	"Adjusting the Cap just right...",
-	"Putting on our thinking Cap...",
-	"Cap-sizing the pixels...",
-	"Wearing our processing Cap...",
-	"Cap-tivating import in progress...",
-	"Flipping our Cap backwards...",
-	"Cap-puccino break? Almost done...",
-	"Cap-able of great things...",
-];
+const funMessageKeys = [
+	"editor.importProgressAdjusting",
+	"editor.importProgressThinking",
+	"editor.importProgressPixels",
+	"editor.importProgressProcessing",
+	"editor.importProgressCaptivating",
+	"editor.importProgressBackwards",
+	"editor.importProgressBreak",
+	"editor.importProgressCapable",
+] satisfies MessageKey[];
 
 export type ImportProgressProps = {
 	projectPath: string;
@@ -25,14 +26,14 @@ export type ImportProgressProps = {
 };
 
 export function ImportProgress(props: ImportProgressProps) {
+	const { t } = useI18n();
 	const [progress, setProgress] = createSignal<VideoImportProgressEvent | null>(
 		null,
 	);
 	const [failed, setFailed] = createSignal<string | null>(null);
 	const [messageIndex, setMessageIndex] = createSignal(
-		Math.floor(Math.random() * funMessages.length),
+		Math.floor(Math.random() * funMessageKeys.length),
 	);
-
 	let messageInterval: ReturnType<typeof setInterval> | undefined;
 	let unlisten: (() => void) | undefined;
 
@@ -43,7 +44,7 @@ export function ImportProgress(props: ImportProgressProps) {
 
 	onMount(async () => {
 		messageInterval = setInterval(() => {
-			setMessageIndex((prev) => (prev + 1) % funMessages.length);
+			setMessageIndex((prev) => (prev + 1) % funMessageKeys.length);
 		}, 4000);
 
 		unlisten = await events.videoImportProgress.listen((event) => {
@@ -78,12 +79,12 @@ export function ImportProgress(props: ImportProgressProps) {
 							</div>
 
 							<h2 class="text-lg font-medium text-gray-12 mb-2">
-								Import Failed
+								{t("editor.importFailed")}
 							</h2>
 							<p class="text-sm text-gray-11 mb-6">{errorMessage()}</p>
 
 							<Button variant="gray" onClick={handleClose}>
-								Close
+								{t("common.close")}
 							</Button>
 						</div>
 					)}
@@ -126,10 +127,10 @@ export function ImportProgress(props: ImportProgressProps) {
 						</div>
 
 						<h2 class="text-lg font-medium text-gray-12 mb-2">
-							Importing Video
+							{t("editor.importingVideo")}
 						</h2>
 						<p class="text-sm text-gray-11 animate-pulse h-5 animate-pulse-slow">
-							{funMessages[messageIndex()]}
+							{t(funMessageKeys[messageIndex()] ?? "editor.importProgress")}
 						</p>
 					</div>
 				</Match>

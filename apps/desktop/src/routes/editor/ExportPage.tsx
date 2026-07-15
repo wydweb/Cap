@@ -25,6 +25,7 @@ import toast from "solid-toast";
 import { SignInButton } from "~/components/SignInButton";
 import Tooltip from "~/components/Tooltip";
 import CaptionControlsWindows11 from "~/components/titlebar/controls/CaptionControlsWindows11";
+import { useI18n } from "~/i18n";
 import { authStore } from "~/store";
 import { trackEvent } from "~/utils/analytics";
 import { createSignInMutation } from "~/utils/auth";
@@ -160,6 +161,7 @@ function buildExportSettings(
 }
 
 export function ExportPage() {
+	const { t } = useI18n();
 	const {
 		setDialog,
 		editorInstance,
@@ -750,7 +752,7 @@ export function ExportPage() {
 				class="flex relative flex-row items-center w-full h-14 border-b border-gray-3 shrink-0"
 			>
 				<h1 class="absolute inset-0 flex items-center justify-center text-sm font-medium text-gray-12 pointer-events-none">
-					Export
+					{t("editor.export")}
 				</h1>
 				<div
 					data-tauri-drag-region
@@ -768,7 +770,9 @@ export function ExportPage() {
 			<div class="flex-1 min-h-0 flex relative">
 				<div class="flex-1 min-h-0 p-5 flex flex-col">
 					<div class="flex items-center gap-1.5 mb-2">
-						<span class="text-sm font-medium text-gray-11">Preview</span>
+						<span class="text-sm font-medium text-gray-11">
+							{t("editor.preview")}
+						</span>
 						<Tooltip content="This is a rendered frame from your video. Adjust the settings below to see the quality of the final exported video.">
 							<IconLucideInfo class="size-3.5 text-gray-9 hover:text-gray-11 cursor-help transition-colors" />
 						</Tooltip>
@@ -785,8 +789,8 @@ export function ExportPage() {
 												<IconLucideImage class="size-12 text-gray-8" />
 												<span class="text-sm">
 													{previewUnavailable()
-														? "Preview unavailable"
-														: "Generating preview..."}
+														? t("editor.previewUnavailable")
+														: t("editor.generatingPreview")}
 												</span>
 											</div>
 										}
@@ -802,7 +806,7 @@ export function ExportPage() {
 								<>
 									<img
 										src={url()}
-										alt="Export preview"
+										alt={t("editor.exportPreview")}
 										class="relative z-0 w-full h-full object-contain"
 									/>
 									<Show when={previewLoading()}>
@@ -901,7 +905,10 @@ export function ExportPage() {
 						Back to editor
 					</button>
 					<div class="flex-1 overflow-y-auto p-4 space-y-5">
-						<Field name="Destination" icon={<IconCapUpload class="size-4" />}>
+						<Field
+							name={t("editor.destination")}
+							icon={<IconCapUpload class="size-4" />}
+						>
 							<div class="flex gap-1.5">
 								<For each={EXPORT_TO_OPTIONS}>
 									{(option) => {
@@ -989,7 +996,7 @@ export function ExportPage() {
 											menu.popup();
 										}}
 									>
-										<span class="text-gray-11">Organization</span>
+										<span class="text-gray-11">{t("editor.organization")}</span>
 										<span class="flex items-center gap-1 text-gray-12">
 											{
 												(
@@ -1005,7 +1012,10 @@ export function ExportPage() {
 							</Suspense>
 						</Field>
 
-						<Field name="Format" icon={<IconLucideVideo class="size-4" />}>
+						<Field
+							name={t("editor.format")}
+							icon={<IconLucideVideo class="size-4" />}
+						>
 							<div class="flex gap-1.5">
 								<For each={FORMAT_OPTIONS}>
 									{(option) => {
@@ -1082,7 +1092,7 @@ export function ExportPage() {
 						</Field>
 
 						<Field
-							name="Resolution"
+							name={t("editor.resolution")}
 							icon={<IconLucideMonitor class="size-4" />}
 						>
 							<div class="flex gap-1.5">
@@ -1115,7 +1125,10 @@ export function ExportPage() {
 							</div>
 						</Field>
 
-						<Field name="Frame Rate" icon={<IconLucideGauge class="size-4" />}>
+						<Field
+							name={t("editor.frameRate")}
+							icon={<IconLucideGauge class="size-4" />}
+						>
 							<div class="flex gap-1.5">
 								<For each={shouldUseGifMode() ? GIF_FPS_OPTIONS : FPS_OPTIONS}>
 									{(option) => (
@@ -1143,7 +1156,7 @@ export function ExportPage() {
 
 						<Show when={settings.format === "Mp4" && !cursorOnly()}>
 							<Field
-								name="Quality"
+								name={t("editor.quality")}
 								icon={<IconLucideSparkles class="size-4" />}
 							>
 								<div class="grid grid-cols-4 gap-1.5">
@@ -1177,8 +1190,8 @@ export function ExportPage() {
 									</For>
 								</div>
 								<div class="flex justify-between text-[10px] text-gray-10 mt-1.5 px-0.5">
-									<span>Smaller file</span>
-									<span>Larger file</span>
+									<span>{t("editor.smallerFile")}</span>
+									<span>{t("editor.largerFile")}</span>
 								</div>
 
 								<button
@@ -1209,7 +1222,7 @@ export function ExportPage() {
 										/>
 									</div>
 									<div class="text-left">
-										<span class="block">Optimize file size</span>
+										<span class="block">{t("editor.optimizeFileSize")}</span>
 										<span class="text-[10px] text-gray-9">
 											Re-encodes with software for much smaller files (slower)
 										</span>
@@ -1219,7 +1232,7 @@ export function ExportPage() {
 						</Show>
 
 						<Field
-							name="Advanced Options"
+							name={t("editor.advancedOptions")}
 							icon={<IconLucideSparkles class="size-4" />}
 						>
 							<button
@@ -1264,7 +1277,7 @@ export function ExportPage() {
 											/>
 										</div>
 										<div class="text-left">
-											<span class="block">Export cursor only</span>
+											<span class="block">{t("editor.exportCursorOnly")}</span>
 											<span class="text-[10px] text-gray-9">
 												Keeps the same cursor motion and clicks on a transparent
 												background
@@ -1292,7 +1305,9 @@ export function ExportPage() {
 									<Show when={settings.format === "Mp4" && !cursorOnly()}>
 										<div class="space-y-2 border-t border-gray-4 pt-3">
 											<div class="flex items-center justify-between text-xs">
-												<span class="text-gray-11">Bits per pixel</span>
+												<span class="text-gray-11">
+													{t("editor.bitsPerPixel")}
+												</span>
 												<span class="text-gray-12 font-medium tabular-nums">
 													{compressionBpp().toFixed(2)}
 												</span>
@@ -1378,7 +1393,7 @@ export function ExportPage() {
 							<div class="flex flex-col items-center gap-2.5">
 								<SignInButton class="w-full justify-center">
 									<IconCapLink class="size-4" />
-									<span>Sign in to share</span>
+									<span>{t("editor.signInToShare")}</span>
 								</SignInButton>
 							</div>
 						) : (
@@ -1426,7 +1441,9 @@ export function ExportPage() {
 			>
 				<div class="p-4">
 					<div class="flex items-center justify-between mb-4">
-						<h2 class="text-gray-12 font-medium">Quality Preview</h2>
+						<h2 class="text-gray-12 font-medium">
+							{t("editor.qualityPreview")}
+						</h2>
 						<button
 							type="button"
 							onClick={() => setPreviewDialogOpen(false)}
@@ -1629,7 +1646,7 @@ export function ExportPage() {
 													) : (
 														<IconLucideCheck class="transition-colors duration-200 text-gray-1 size-4 svgpathanimation group-hover:text-gray-12" />
 													)}
-													<p>Copy Link</p>
+													<p>{t("editor.copyLink")}</p>
 												</Button>
 												<a href={link()} target="_blank" rel="noreferrer">
 													<Button
@@ -1637,7 +1654,7 @@ export function ExportPage() {
 														class="flex gap-2 justify-center items-center"
 													>
 														<IconCapLink class="transition-colors duration-200 text-gray-1 size-4 group-hover:text-gray-12" />
-														<p>Open Link</p>
+														<p>{t("editor.openLink")}</p>
 													</Button>
 												</a>
 											</div>

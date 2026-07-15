@@ -19,6 +19,7 @@ import {
 } from "solid-js";
 import { produce } from "solid-js/store";
 import toast from "solid-toast";
+import { useI18n } from "~/i18n";
 
 import "./styles.css";
 
@@ -150,6 +151,7 @@ export function Timeline(props: {
 		visibleTrackCount: number;
 	}) => void;
 }) {
+	const { t } = useI18n();
 	const {
 		project,
 		setProject,
@@ -1113,7 +1115,11 @@ export function Timeline(props: {
 						}}
 					>
 						<div class="flex flex-col gap-2 min-h-full">
-							<TrackRow icon={trackIcons.clip} label="Video" type="clip">
+							<TrackRow
+								icon={trackIcons.clip}
+								label={t("editor.video")}
+								type="clip"
+							>
 								<ClipTrack
 									ref={setTimelineRef}
 									handleUpdatePlayhead={handleUpdatePlayhead}
@@ -1122,7 +1128,7 @@ export function Timeline(props: {
 							<Show when={captionTrackVisible()}>
 								<TrackRow
 									icon={trackIcons.caption}
-									label="Captions"
+									label={t("editor.captions")}
 									type="caption"
 									onDelete={() => handleDeleteSingleTrack("caption")}
 								>
@@ -1139,7 +1145,7 @@ export function Timeline(props: {
 							<Show when={keyboardTrackVisible()}>
 								<TrackRow
 									icon={trackIcons.keyboard}
-									label="Keyboard"
+									label={t("editor.keyboard")}
 									type="keyboard"
 									onDelete={() => handleDeleteSingleTrack("keyboard")}
 								>
@@ -1155,7 +1161,7 @@ export function Timeline(props: {
 								{(laneIndex) => (
 									<TrackRow
 										icon={trackIcons.text}
-										label="Text"
+										label={t("editor.text")}
 										type="text"
 										onDelete={() => handleDeleteTrackLane("text", laneIndex)}
 										onContextMenu={(e) =>
@@ -1176,7 +1182,7 @@ export function Timeline(props: {
 								{(laneIndex) => (
 									<TrackRow
 										icon={trackIcons.mask}
-										label="Mask"
+										label={t("editor.mask")}
 										type="mask"
 										onDelete={() => handleDeleteTrackLane("mask", laneIndex)}
 										onContextMenu={(e) =>
@@ -1197,7 +1203,7 @@ export function Timeline(props: {
 								{(laneIndex) => (
 									<TrackRow
 										icon={trackIcons.audio}
-										label="Audio"
+										label={t("editor.audio")}
 										type="audio"
 										onDelete={() => handleDeleteTrackLane("audio", laneIndex)}
 										onContextMenu={(e) =>
@@ -1217,15 +1223,15 @@ export function Timeline(props: {
 							</For>
 							<TrackRow
 								icon={trackIcons.zoom}
-								label="Zoom"
+								label={t("editor.zoom")}
 								type="zoom"
 								onDelete={
 									(project.timeline?.zoomSegments?.length ?? 0) > 0
 										? () => handleClearTrackSegments("zoom")
 										: undefined
 								}
-								deleteLabel="Clear all"
-								deleteTitle="Delete all zoom segments"
+								deleteLabel={t("editor.clearAll")}
+								deleteTitle={t("editor.deleteAllZoom")}
 							>
 								<ZoomTrack
 									onDragStateChanged={(v) => {
@@ -1237,15 +1243,15 @@ export function Timeline(props: {
 							<Show when={sceneTrackVisible()}>
 								<TrackRow
 									icon={trackIcons.scene}
-									label="Scene"
+									label={t("editor.scene")}
 									type="scene"
 									onDelete={
 										(project.timeline?.sceneSegments?.length ?? 0) > 0
 											? () => handleClearTrackSegments("scene")
 											: undefined
 									}
-									deleteLabel="Clear all"
-									deleteTitle="Delete all scene segments"
+									deleteLabel={t("editor.clearAll")}
+									deleteTitle={t("editor.deleteAllScenes")}
 								>
 									<SceneTrack
 										onDragStateChanged={(v) => {

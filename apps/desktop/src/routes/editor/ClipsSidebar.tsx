@@ -25,6 +25,7 @@ import {
 import { produce, reconcile } from "solid-js/store";
 import { Portal } from "solid-js/web";
 import toast from "solid-toast";
+import { useI18n } from "~/i18n";
 import { createDevicesQuery } from "~/utils/devices";
 import {
 	createCameraMutation,
@@ -256,6 +257,7 @@ export function ClipsSidebar(props: { open: boolean; class?: string }) {
 }
 
 function ClipsSidebarInner(props: { open: boolean; class?: string }) {
+	const { t } = useI18n();
 	const {
 		project,
 		setProject,
@@ -774,7 +776,7 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 						onClick={() => setRecordOpen(true)}
 					>
 						<IconLucideVideo class="size-4" />
-						Record a new clip
+						{t("editor.recordNewClip")}
 					</Button>
 					<Button
 						variant="gray"
@@ -783,12 +785,14 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 						onClick={openImportMenu}
 					>
 						<IconCapCirclePlus class="size-4" />
-						Import
+						{t("editor.import")}
 					</Button>
 				</div>
 
 				<div class="flex flex-none gap-2 items-center">
-					<span class="text-sm font-medium text-gray-12">Clips</span>
+					<span class="text-sm font-medium text-gray-12">
+						{t("editor.clips")}
+					</span>
 					<Show when={recordedClipCount() > 0}>
 						<span class="rounded-md bg-gray-3 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-gray-11">
 							{recordedClipCount()}
@@ -804,9 +808,11 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 								<div class="flex justify-center items-center rounded-full size-10 bg-gray-3 text-gray-9">
 									<IconCapClapperboard class="size-5" />
 								</div>
-								<p class="text-sm font-medium text-gray-12">No clips yet</p>
+								<p class="text-sm font-medium text-gray-12">
+									{t("editor.noClips")}
+								</p>
 								<p class="max-w-[200px] text-xs text-gray-10">
-									Record or import a clip and it will show up here.
+									{t("editor.noClipsDescription")}
 								</p>
 							</div>
 						}
@@ -901,7 +907,7 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 														onClick={() =>
 															startRename(index(), segment.name ?? "")
 														}
-														aria-label="Rename clip"
+														aria-label={t("editor.renameClip")}
 														class="flex flex-none justify-center items-center rounded-md opacity-0 transition-colors size-7 text-gray-10 hover:bg-gray-5 hover:text-gray-12 group-hover:opacity-100"
 													>
 														<IconCapPencil class="size-3.5" />
@@ -911,7 +917,7 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 															type="button"
 															data-clip-delete
 															onClick={() => deleteClip(index())}
-															aria-label="Remove clip"
+															aria-label={t("editor.removeClip")}
 															class="flex flex-none justify-center items-center rounded-md opacity-0 transition-colors size-7 text-gray-10 hover:bg-red-3 hover:text-red-11 group-hover:opacity-100"
 														>
 															<IconCapTrash class="size-3.5" />
@@ -943,16 +949,16 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 								</div>
 								<div class="flex flex-col gap-0.5 min-w-0">
 									<h2 class="text-sm font-medium text-gray-12">
-										Record a new clip
+										{t("editor.recordNewClip")}
 									</h2>
 									<p class="text-xs text-gray-10">
-										Captured in Studio Mode and added to this project.
+										{t("editor.newClipDescription")}
 									</p>
 								</div>
 								<button
 									type="button"
 									onClick={closeRecord}
-									aria-label="Close"
+									aria-label={t("common.close")}
 									class="flex flex-none justify-center items-center ml-auto rounded-md transition-colors size-7 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
 								>
 									<IconCapX class="size-3" />
@@ -978,7 +984,7 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 															selected={rawOptions.targetMode === "display"}
 															Component={IconMdiMonitor}
 															onClick={() => void openTargetMode("display")}
-															name="Display"
+															name={t("target.display")}
 															class="flex-1 pl-5 rounded-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
 														/>
 														<TargetDropdownButton
@@ -996,7 +1002,7 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 																});
 															}}
 															aria-haspopup="menu"
-															aria-label="Choose display"
+															aria-label={t("target.chooseDisplay")}
 														/>
 													</div>
 													<div
@@ -1011,7 +1017,7 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 															selected={rawOptions.targetMode === "window"}
 															Component={IconLucideAppWindowMac}
 															onClick={() => void openTargetMode("window")}
-															name="Window"
+															name={t("target.window")}
 															class="flex-1 pl-5 rounded-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
 														/>
 														<TargetDropdownButton
@@ -1029,17 +1035,21 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 																});
 															}}
 															aria-haspopup="menu"
-															aria-label="Choose window"
+															aria-label={t("target.chooseWindow")}
 														/>
 													</div>
 												</div>
 												<div class="flex flex-row gap-2 items-stretch w-full">
 													{areaButton(
 														"area",
-														"Area",
+														t("target.area"),
 														IconMaterialSymbolsScreenshotFrame2Rounded,
 													)}
-													{areaButton("camera", "Camera Only", IconLucideVideo)}
+													{areaButton(
+														"camera",
+														t("target.cameraOnly"),
+														IconLucideVideo,
+													)}
 												</div>
 											</div>
 
@@ -1100,10 +1110,12 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 													)?.focus();
 												}}
 												class="flex h-[36px] gap-1 items-center shrink-0 rounded-md px-2 text-xs text-gray-11 transition-colors hover:text-gray-12 hover:bg-gray-4"
-												aria-label="Back"
+												aria-label={t("common.back")}
 											>
 												<IconLucideArrowLeft class="size-3 text-gray-11" />
-												<span class="font-medium text-gray-12">Back</span>
+												<span class="font-medium text-gray-12">
+													{t("common.back")}
+												</span>
 											</button>
 											<div class="relative flex-1 min-w-0 h-[36px] flex items-center">
 												<IconLucideSearch class="absolute left-2 top-[48%] -translate-y-1/2 pointer-events-none size-3 text-gray-10" />

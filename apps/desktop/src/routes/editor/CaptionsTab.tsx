@@ -17,6 +17,7 @@ import { produce } from "solid-js/store";
 import toast from "solid-toast";
 import { Toggle } from "~/components/Toggle";
 import Tooltip from "~/components/Tooltip";
+import { useI18n } from "~/i18n";
 import {
 	CAPTION_STYLE_PRESETS,
 	type CaptionAnimation,
@@ -242,6 +243,7 @@ function CaptionPresetPreview(props: { preset: CaptionStylePreset }) {
 export function CaptionsTab(props: {
 	brandColorSwatches: OrganizationBrandColorSwatch[];
 }) {
+	const { t } = useI18n();
 	const { project, setProject, editorInstance, editorState, setEditorState } =
 		useEditorContext();
 
@@ -754,11 +756,15 @@ export function CaptionsTab(props: {
 	);
 
 	return (
-		<Field name="Captions" icon={<IconCapMessageBubble />} badge="Beta">
+		<Field
+			name={t("editor.captions")}
+			icon={<IconCapMessageBubble />}
+			badge="Beta"
+		>
 			<div class="flex flex-col gap-4">
 				<div class="space-y-6 transition-all duration-200">
 					<div class="space-y-4">
-						<Subfield name="Model" class="items-start">
+						<Subfield name={t("editor.model")} class="items-start">
 							<KSelect<string>
 								options={availableModelOptions().map((model) => model.name)}
 								value={selectedModel()}
@@ -873,7 +879,7 @@ export function CaptionsTab(props: {
 							One time download to your system. All captions are stored locally.
 						</p>
 
-						<Subfield name="Language">
+						<Subfield name={t("editor.language")}>
 							<KSelect<string>
 								options={LANGUAGE_OPTIONS.map((l) => l.code)}
 								value={selectedLanguage()}
@@ -1029,7 +1035,7 @@ export function CaptionsTab(props: {
 							!hasCaptions() && "opacity-50 pointer-events-none",
 						)}
 					>
-						<Field name="Style" icon={<IconCapMessageBubble />}>
+						<Field name={t("editor.style")} icon={<IconCapMessageBubble />}>
 							<div class="grid grid-cols-2 gap-2">
 								<For each={CAPTION_STYLE_PRESETS}>
 									{(preset) => (
@@ -1065,10 +1071,15 @@ export function CaptionsTab(props: {
 							</div>
 						</Field>
 
-						<Field name="Font Settings" icon={<IconCapMessageBubble />}>
+						<Field
+							name={t("editor.fontSettings")}
+							icon={<IconCapMessageBubble />}
+						>
 							<div class="space-y-3">
 								<div class="flex flex-col gap-2">
-									<span class="text-gray-11 text-sm">Font Family</span>
+									<span class="text-gray-11 text-sm">
+										{t("editor.fontFamily")}
+									</span>
 									<KSelect<string>
 										options={FONT_OPTIONS.map((f) => f.value)}
 										value={getSetting("font")}
@@ -1119,7 +1130,7 @@ export function CaptionsTab(props: {
 								</div>
 
 								<div class="flex flex-col gap-2">
-									<span class="text-gray-11 text-sm">Size</span>
+									<span class="text-gray-11 text-sm">{t("editor.size")}</span>
 									<Slider
 										value={[getSetting("size")]}
 										onChange={(v) => updateCaptionSetting("size", v[0])}
@@ -1131,7 +1142,9 @@ export function CaptionsTab(props: {
 								</div>
 
 								<div class="flex items-center justify-between">
-									<span class="text-gray-11 text-sm">Uppercase</span>
+									<span class="text-gray-11 text-sm">
+										{t("editor.uppercase")}
+									</span>
 									<Toggle
 										checked={getSetting("uppercase")}
 										onChange={(checked) =>
@@ -1164,7 +1177,9 @@ export function CaptionsTab(props: {
 
 								<Show when={getSetting("activeWordHighlight")}>
 									<div class="flex flex-col gap-2">
-										<span class="text-gray-11 text-sm">Highlight Style</span>
+										<span class="text-gray-11 text-sm">
+											{t("editor.highlightStyle")}
+										</span>
 										<KSelect<string>
 											options={CAPTION_HIGHLIGHT_STYLE_OPTIONS.map(
 												(o) => o.value,
@@ -1220,7 +1235,9 @@ export function CaptionsTab(props: {
 								</Show>
 
 								<div class="flex flex-col gap-2">
-									<span class="text-gray-11 text-sm">Text Color</span>
+									<span class="text-gray-11 text-sm">
+										{t("editor.textColor")}
+									</span>
 									<HexColorInput
 										value={getSetting("color")}
 										brandColorSwatches={props.brandColorSwatches}
@@ -1230,10 +1247,15 @@ export function CaptionsTab(props: {
 							</div>
 						</Field>
 
-						<Field name="Background Settings" icon={<IconCapMessageBubble />}>
+						<Field
+							name={t("editor.backgroundSettings")}
+							icon={<IconCapMessageBubble />}
+						>
 							<div class="space-y-3">
 								<div class="flex flex-col gap-2">
-									<span class="text-gray-11 text-sm">Background Color</span>
+									<span class="text-gray-11 text-sm">
+										{t("editor.backgroundColor")}
+									</span>
 									<HexColorInput
 										value={getSetting("backgroundColor")}
 										brandColorSwatches={props.brandColorSwatches}
@@ -1244,7 +1266,9 @@ export function CaptionsTab(props: {
 								</div>
 
 								<div class="flex flex-col gap-2">
-									<span class="text-gray-11 text-sm">Background Opacity</span>
+									<span class="text-gray-11 text-sm">
+										{t("editor.backgroundOpacity")}
+									</span>
 									<Slider
 										value={[getSetting("backgroundOpacity")]}
 										onChange={(v) =>
@@ -1259,7 +1283,7 @@ export function CaptionsTab(props: {
 							</div>
 						</Field>
 
-						<Field name="Position" icon={<IconCapMessageBubble />}>
+						<Field name={t("editor.position")} icon={<IconCapMessageBubble />}>
 							<KSelect<string>
 								options={CAPTION_POSITION_OPTIONS.map((p) => p.value)}
 								value={getSetting("position")}
@@ -1312,10 +1336,12 @@ export function CaptionsTab(props: {
 							</KSelect>
 						</Field>
 
-						<Field name="Animation" icon={<IconCapMessageBubble />}>
+						<Field name={t("editor.animation")} icon={<IconCapMessageBubble />}>
 							<div class="space-y-3">
 								<div class="flex flex-col gap-2">
-									<span class="text-gray-11 text-sm">Animation Style</span>
+									<span class="text-gray-11 text-sm">
+										{t("editor.animationStyle")}
+									</span>
 									<KSelect<string>
 										options={CAPTION_ANIMATION_OPTIONS.map((o) => o.value)}
 										value={getSetting("animation")}
@@ -1367,7 +1393,9 @@ export function CaptionsTab(props: {
 									</KSelect>
 								</div>
 								<div class="flex flex-col gap-2">
-									<span class="text-gray-11 text-sm">Highlight Color</span>
+									<span class="text-gray-11 text-sm">
+										{t("editor.highlightColor")}
+									</span>
 									<HexColorInput
 										value={getSetting("highlightColor")}
 										brandColorSwatches={props.brandColorSwatches}
@@ -1377,7 +1405,9 @@ export function CaptionsTab(props: {
 									/>
 								</div>
 								<div class="flex flex-col gap-2">
-									<span class="text-gray-11 text-sm">Fade Duration</span>
+									<span class="text-gray-11 text-sm">
+										{t("editor.fadeDuration")}
+									</span>
 									<Slider
 										value={[getSetting("fadeDuration") * 100]}
 										onChange={(v) =>
@@ -1395,7 +1425,10 @@ export function CaptionsTab(props: {
 							</div>
 						</Field>
 
-						<Field name="Font Weight" icon={<IconCapMessageBubble />}>
+						<Field
+							name={t("editor.fontWeight")}
+							icon={<IconCapMessageBubble />}
+						>
 							<KSelect
 								options={TEXT_WEIGHT_OPTIONS}
 								optionValue="value"
@@ -1451,8 +1484,11 @@ export function CaptionsTab(props: {
 							</KSelect>
 						</Field>
 
-						<Field name="Export Options" icon={<IconCapMessageBubble />}>
-							<Subfield name="Export with Subtitles">
+						<Field
+							name={t("editor.exportOptions")}
+							icon={<IconCapMessageBubble />}
+						>
+							<Subfield name={t("editor.exportWithSubtitles")}>
 								<Toggle
 									checked={getSetting("exportWithSubtitles")}
 									onChange={(checked) =>

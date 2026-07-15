@@ -6,6 +6,7 @@ import {
 	createSignal,
 	Show,
 } from "solid-js";
+import { useI18n } from "~/i18n";
 import { trackEvent } from "~/utils/analytics";
 import { createTauriEventListener } from "~/utils/createEventListener";
 import { createCurrentRecordingQuery } from "~/utils/queries";
@@ -21,8 +22,6 @@ import InfoPill from "./InfoPill";
 import TargetSelectInfoPill from "./TargetSelectInfoPill";
 import useRequestPermission from "./useRequestPermission";
 
-const NO_MICROPHONE = "No Microphone";
-
 export default function MicrophoneSelect(props: {
 	disabled?: boolean;
 	options: string[];
@@ -32,6 +31,7 @@ export default function MicrophoneSelect(props: {
 	onOpen?: () => void;
 	onOpenSettings?: () => void;
 }) {
+	const { t } = useI18n();
 	const DB_SCALE = 40;
 	const currentRecording = createCurrentRecordingQuery();
 	const requestPermission = useRequestPermission();
@@ -95,7 +95,9 @@ export default function MicrophoneSelect(props: {
 					/>
 				</Show>
 				<IconCapMicrophone class={DEVICE_ROW_ICON_CLASS} />
-				<p class={DEVICE_ROW_LABEL_CLASS}>{props.value ?? NO_MICROPHONE}</p>
+				<p class={DEVICE_ROW_LABEL_CLASS}>
+					{props.value ?? t("recording.noMicrophone")}
+				</p>
 				<div class={DEVICE_ROW_TRAILING_CLASS}>
 					<Show when={showSettingsShortcut()}>
 						<button
@@ -107,8 +109,8 @@ export default function MicrophoneSelect(props: {
 							}}
 							onPointerDown={(e) => e.stopPropagation()}
 							class={DEVICE_SHORTCUT_BUTTON_CLASS}
-							title="Microphone settings"
-							aria-label="Microphone settings"
+							title={t("recording.microphoneSettings")}
+							aria-label={t("recording.microphoneSettings")}
 						>
 							<IconLucideSettings class="size-3.5" />
 						</button>
@@ -146,6 +148,7 @@ export function MicrophoneSelectBase(props: {
 	>;
 	permissions?: OSPermissionsCheck;
 }) {
+	const { t } = useI18n();
 	const DB_SCALE = 40;
 
 	const currentRecording = createCurrentRecordingQuery();
@@ -194,7 +197,7 @@ export function MicrophoneSelectBase(props: {
 
 					Promise.all([
 						CheckMenuItem.new({
-							text: NO_MICROPHONE,
+							text: t("recording.noMicrophone"),
 							checked: props.value === null,
 							action: () => handleMicrophoneChange(null),
 						}),
@@ -226,7 +229,7 @@ export function MicrophoneSelectBase(props: {
 				</Show>
 				<IconCapMicrophone class={props.iconClass} />
 				<p class="flex-1 text-sm text-left truncate">
-					{props.value ?? NO_MICROPHONE}
+					{props.value ?? t("recording.noMicrophone")}
 				</p>
 				<TargetSelectInfoPill
 					PillComponent={props.PillComponent}

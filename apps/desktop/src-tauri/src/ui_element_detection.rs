@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     sync::mpsc::{self, Sender},
     thread,
 };
@@ -9,8 +10,8 @@ use scap_targets::{
 };
 use tokio::sync::oneshot;
 use uiautomation::{
-    UIAutomation, UIElement, UITreeWalker,
-    core::UICacheRequest,
+    UIAutomation, UIElement,
+    core::{UICacheRequest, UICondition},
     types::{Handle, TreeScope, UIProperty},
 };
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
@@ -136,14 +137,39 @@ impl UiElementDetector {
 
 struct UiAutomationState {
     automation: UIAutomation,
-    walker: UITreeWalker,
+    true_condition: UICondition,
     cache_request: UICacheRequest,
+    window_caches: HashMap<isize, WindowElementCache>,
+}
+
+struct CachedElement {
+    element: UIElement,
+    bounds: Option<PhysicalRect>,
+    children: Option<Vec<usize>>,
+}
+
+struct WindowElementCache {
+    window_bounds: PhysicalRect,
+    elements: Vec<CachedElement>,
+}
+
+impl WindowElementCache {
+    fn new(window_bounds: PhysicalRect, root: UIElement) -> Self {
+        Self {
+            window_bounds,
+            elements: vec![CachedElement {
+                element: root,
+                bounds: None,
+                children: None,
+            }],
+        }
+    }
 }
 
 impl UiAutomationState {
     fn new() -> uiautomation::Result<Self> {
         let automation = UIAutomation::new()?;
-        let walker = automation.get_content_view_walker()?;
+        let true_condition = automation.create_true_condition()?;
         let cache_request = automation.create_cache_request()?;
         cache_request.add_property(UIProperty::BoundingRectangle)?;
         cache_request.add_property(UIProperty::IsOffscreen)?;
@@ -151,8 +177,9 @@ impl UiAutomationState {
 
         Ok(Self {
             automation,
-            walker,
+            true_condition,
             cache_request,
+            window_caches: HashMap::new(),
         })
     }
 
@@ -160,28 +187,22 @@ impl UiAutomationState {
         let mut cursor = windows::Win32::Foundation::POINT::default();
         unsafe { GetCursorPos(&mut cursor) }.map_err(|error| error.to_string())?;
 
-        let root = self
-            .automation
-            .element_from_handle(Handle::from(request.query.hwnd))?;
-        let mut parent = root;
-        let mut physical_bounds = Vec::new();
-
-        for _ in 0..64 {
-            let Some((element, bounds)) = self.child_at_point(
-                &parent,
-                cursor.x as f64,
-                cursor.y as f64,
+        let mut cache = match self.window_caches.remove(&request.query.hwnd) {
+            Some(cache) if cache.window_bounds == request.query.window_bounds => cache,
+            _ => WindowElementCache::new(
                 request.query.window_bounds,
-            )?
-            else {
-                break;
-            };
-
-            if physical_bounds.last() != Some(&bounds) {
-                physical_bounds.push(bounds);
-            }
-            parent = element;
-        }
+                self.automation
+                    .element_from_handle(Handle::from(request.query.hwnd))?,
+            ),
+        };
+        let physical_bounds = self.detect_from_cache(
+            &mut cache,
+            cursor.x as f64,
+            cursor.y as f64,
+            request.query.window_bounds,
+        );
+        self.window_caches.insert(request.query.hwnd, cache);
+        let mut physical_bounds = physical_bounds?;
 
         physical_bounds.reverse();
         Ok(physical_bounds
@@ -196,44 +217,96 @@ impl UiAutomationState {
             .collect())
     }
 
-    fn child_at_point(
+    fn detect_from_cache(
         &self,
-        parent: &UIElement,
+        cache: &mut WindowElementCache,
         x: f64,
         y: f64,
         window_bounds: PhysicalRect,
-    ) -> uiautomation::Result<Option<(UIElement, PhysicalRect)>> {
-        let Ok(mut element) = self
-            .walker
-            .get_first_child_build_cache(parent, &self.cache_request)
-        else {
-            return Ok(None);
-        };
+    ) -> uiautomation::Result<Vec<PhysicalRect>> {
+        let mut current_index = 0;
+        let mut physical_bounds = Vec::new();
 
-        loop {
-            if !element.is_cached_offscreen().unwrap_or(true)
-                && let Ok(rect) = element.get_cached_bounding_rectangle()
-                && let Some(bounds) = PhysicalRect::new(
-                    rect.get_left() as f64,
-                    rect.get_top() as f64,
-                    rect.get_right() as f64,
-                    rect.get_bottom() as f64,
-                )
-                .intersect(window_bounds)
-                && bounds.contains(x, y)
-            {
-                return Ok(Some((element, bounds)));
-            }
+        for _ in 0..64 {
+            let child_indexes = self.cached_children(cache, current_index, window_bounds)?;
+            let Some(child_index) = child_indexes.into_iter().find(|index| {
+                cache.elements[*index]
+                    .bounds
+                    .is_some_and(|bounds| is_candidate_at_point(false, bounds, x, y, window_bounds))
+            }) else {
+                break;
+            };
+            let bounds = cache.elements[child_index].bounds.unwrap();
 
-            match self
-                .walker
-                .get_next_sibling_build_cache(&element, &self.cache_request)
-            {
-                Ok(sibling) => element = sibling,
-                Err(_) => return Ok(None),
+            if physical_bounds.last() != Some(&bounds) {
+                physical_bounds.push(bounds);
             }
+            current_index = child_index;
         }
+
+        Ok(physical_bounds)
     }
+
+    fn cached_children(
+        &self,
+        cache: &mut WindowElementCache,
+        parent_index: usize,
+        window_bounds: PhysicalRect,
+    ) -> uiautomation::Result<Vec<usize>> {
+        if let Some(children) = &cache.elements[parent_index].children {
+            return Ok(children.clone());
+        }
+
+        let parent = cache.elements[parent_index].element.clone();
+        let elements = parent.find_all_build_cache(
+            TreeScope::Children,
+            &self.true_condition,
+            &self.cache_request,
+        )?;
+        let mut child_indexes = Vec::with_capacity(elements.len());
+
+        for element in elements {
+            let is_offscreen = element.is_cached_offscreen().unwrap_or(true);
+            if is_offscreen {
+                continue;
+            }
+            let Ok(rect) = element.get_cached_bounding_rectangle() else {
+                continue;
+            };
+            let bounds = PhysicalRect::new(
+                rect.get_left() as f64,
+                rect.get_top() as f64,
+                rect.get_right() as f64,
+                rect.get_bottom() as f64,
+            );
+            let Some(bounds) = bounds.intersect(window_bounds) else {
+                continue;
+            };
+            let child_index = cache.elements.len();
+            cache.elements.push(CachedElement {
+                element,
+                bounds: Some(bounds),
+                children: None,
+            });
+            child_indexes.push(child_index);
+        }
+
+        cache.elements[parent_index].children = Some(child_indexes.clone());
+        Ok(child_indexes)
+    }
+}
+
+fn is_candidate_at_point(
+    is_offscreen: bool,
+    bounds: PhysicalRect,
+    x: f64,
+    y: f64,
+    window_bounds: PhysicalRect,
+) -> bool {
+    !is_offscreen
+        && bounds
+            .intersect(window_bounds)
+            .is_some_and(|bounds| bounds.contains(x, y))
 }
 
 fn physical_to_display_logical(
@@ -294,5 +367,34 @@ mod tests {
             )
             .is_none()
         );
+    }
+
+    #[test]
+    fn selects_visible_candidate_containing_the_cursor() {
+        assert!(is_candidate_at_point(
+            false,
+            PhysicalRect::new(20.0, 20.0, 80.0, 80.0),
+            40.0,
+            40.0,
+            PhysicalRect::new(0.0, 0.0, 100.0, 100.0),
+        ));
+    }
+
+    #[test]
+    fn rejects_offscreen_and_non_containing_candidates() {
+        let bounds = PhysicalRect::new(20.0, 20.0, 80.0, 80.0);
+        let window = PhysicalRect::new(0.0, 0.0, 100.0, 100.0);
+
+        assert!(!is_candidate_at_point(true, bounds, 40.0, 40.0, window));
+        assert!(!is_candidate_at_point(false, bounds, 90.0, 90.0, window));
+    }
+
+    #[test]
+    fn uses_the_window_clipped_candidate_bounds() {
+        let bounds = PhysicalRect::new(-20.0, -20.0, 80.0, 80.0);
+        let window = PhysicalRect::new(0.0, 0.0, 100.0, 100.0);
+
+        assert!(is_candidate_at_point(false, bounds, 20.0, 20.0, window));
+        assert!(!is_candidate_at_point(false, bounds, -10.0, -10.0, window));
     }
 }

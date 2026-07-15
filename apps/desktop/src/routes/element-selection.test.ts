@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+	areaContextAction,
 	buildElementCandidates,
 	cycleElementLevel,
 	elementCandidateSignature,
+	hasAreaSelection,
 } from "./element-selection";
 
 const bounds = (x: number, y: number, width: number, height: number) => ({
@@ -51,9 +53,15 @@ describe("buildElementCandidates", () => {
 
 describe("element level selection", () => {
 	it("cycles toward parents and back toward children", () => {
-		expect(cycleElementLevel(0, 1, 3)).toBe(1);
-		expect(cycleElementLevel(1, -1, 3)).toBe(0);
-		expect(cycleElementLevel(2, 1, 3)).toBe(2);
+		expect(cycleElementLevel(0, -1, 3)).toBe(1);
+		expect(cycleElementLevel(1, 1, 3)).toBe(0);
+	});
+
+	it("keeps the first and last levels within bounds", () => {
+		expect(cycleElementLevel(0, 1, 3)).toBe(0);
+		expect(cycleElementLevel(2, -1, 3)).toBe(2);
+		expect(cycleElementLevel(1, 0, 3)).toBe(1);
+		expect(cycleElementLevel(0, -1, 0)).toBe(0);
 	});
 
 	it("changes its signature when the hierarchy changes", () => {
@@ -61,6 +69,22 @@ describe("element level selection", () => {
 		const second = [{ x: 1, y: 0, width: 100, height: 100 }];
 		expect(elementCandidateSignature(first)).not.toBe(
 			elementCandidateSignature(second),
+		);
+	});
+});
+
+describe("area selection state", () => {
+	it("distinguishes an existing selection from the empty crop", () => {
+		expect(hasAreaSelection({ x: 0, y: 0, width: 200, height: 100 })).toBe(
+			true,
+		);
+		expect(hasAreaSelection({ x: 0, y: 0, width: 1, height: 1 })).toBe(false);
+	});
+
+	it("maps right click to exit before selection and clear after selection", () => {
+		expect(areaContextAction({ x: 0, y: 0, width: 1, height: 1 })).toBe("exit");
+		expect(areaContextAction({ x: 10, y: 10, width: 200, height: 100 })).toBe(
+			"clear",
 		);
 	});
 });

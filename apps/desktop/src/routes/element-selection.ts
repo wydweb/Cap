@@ -62,8 +62,16 @@ export function cycleElementLevel(
 	candidateCount: number,
 ) {
 	if (candidateCount === 0 || deltaY === 0) return current;
-	const next = current + (deltaY > 0 ? 1 : -1);
+	const next = current + (deltaY < 0 ? 1 : -1);
 	return Math.max(0, Math.min(candidateCount - 1, next));
+}
+
+export function hasAreaSelection(bounds: CropBounds) {
+	return bounds.width > 1 && bounds.height > 1;
+}
+
+export function areaContextAction(bounds: CropBounds) {
+	return hasAreaSelection(bounds) ? "clear" : "exit";
 }
 
 export function elementCandidateSignature(candidates: CropBounds[]) {

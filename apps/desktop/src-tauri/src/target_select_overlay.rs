@@ -243,7 +243,7 @@ pub async fn open_target_select_overlays(
                 }
                 .emit(&app);
 
-                tokio::time::sleep(Duration::from_millis(50)).await;
+                tokio::time::sleep(Duration::from_millis(16)).await;
             }
         }
     });

@@ -10,12 +10,7 @@ import {
 	type PhysicalSize,
 } from "@tauri-apps/api/dpi";
 import { emit } from "@tauri-apps/api/event";
-import {
-	CheckMenuItem,
-	Menu,
-	MenuItem,
-	PredefinedMenuItem,
-} from "@tauri-apps/api/menu";
+import { CheckMenuItem, Menu, MenuItem } from "@tauri-apps/api/menu";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { type as ostype } from "@tauri-apps/plugin-os";
 import {
@@ -51,8 +46,6 @@ import {
 	type CropBounds,
 	Cropper,
 	type CropperRef,
-	createCropOptionsMenuItems,
-	type Ratio,
 } from "~/components/Cropper";
 import ModeSelect from "~/components/ModeSelect";
 import SelectionHint from "~/components/selection-hint";
@@ -86,9 +79,11 @@ import {
 	useRecordingOptions,
 } from "./(window-chrome)/OptionsContext";
 import {
+	areaContextAction,
 	buildElementCandidates,
 	cycleElementLevel,
 	elementCandidateSignature,
+	hasAreaSelection,
 } from "./element-selection";
 
 const MIN_SIZE = { width: 150, height: 150 };
@@ -782,9 +777,6 @@ function Inner() {
 						},
 					}));
 
-					const [aspect, setAspect] = createSignal<Ratio | null>(null);
-					const [snapToRatioEnabled, setSnapToRatioEnabled] =
-						createSignal(true);
 					const [isInteracting, setIsInteracting] = createSignal(false);
 					const isActiveDisplay = createMemo(() => {
 						const activeDisplayId = targetUnderCursor.display_id;
@@ -815,6 +807,7 @@ function Inner() {
 						);
 					});
 					const selectedElementCandidate = createMemo(() => {
+						if (hasAreaSelection(crop())) return undefined;
 						const candidates = elementCandidates();
 						return candidates[Math.min(elementLevel(), candidates.length - 1)];
 					});
@@ -828,7 +821,12 @@ function Inner() {
 
 					function handleElementWheel(event: WheelEvent) {
 						const candidates = elementCandidates();
-						if (isInteracting() || candidates.length === 0) return;
+						if (
+							isInteracting() ||
+							hasAreaSelection(crop()) ||
+							candidates.length === 0
+						)
+							return;
 						event.preventDefault();
 						event.stopPropagation();
 						setElementLevel((level) =>
@@ -1027,31 +1025,23 @@ function Inner() {
 						revertCamera();
 					});
 
-					async function showCropOptionsMenu(e: UIEvent) {
+					async function handleAreaContextMenu(e: PointerEvent) {
 						e.preventDefault();
 						e.stopPropagation();
-						const items = [
-							{
-								text: "Reset selection",
-								action: () => {
-									cropperRef?.reset();
-									setAspect(null);
-									setPendingAreaTarget(null);
-									revertCamera();
-								},
-							},
-							await PredefinedMenuItem.new({
-								item: "Separator",
-							}),
-							...createCropOptionsMenuItems({
-								aspect: aspect(),
-								snapToRatioEnabled: snapToRatioEnabled(),
-								onAspectSet: setAspect,
-								onSnapToRatioSet: setSnapToRatioEnabled,
-							}),
-						];
-						const menu = await Menu.new({ items });
-						await menu.popup();
+						if (areaContextAction(crop()) === "exit") {
+							setOptions({
+								targetMode: null,
+								targetModeDismissal: "cancelled",
+							});
+							await commands.closeTargetSelectOverlays();
+							return;
+						}
+
+						setInitialAreaBounds(undefined);
+						setPendingAreaTarget(null);
+						cropperRef?.clear();
+						setCrop(CROP_ZERO);
+						await revertCamera();
 					}
 
 					// Spacing rules:
@@ -1277,7 +1267,7 @@ function Inner() {
 							>
 								{(bounds) => (
 									<div
-										class="fixed pointer-events-none z-30 border-2 border-blue-9 rounded-sm shadow-sm"
+										class="fixed pointer-events-none z-40 border-2 border-blue-9 rounded-sm shadow-sm"
 										style={{
 											left: `${bounds.x}px`,
 											top: `${bounds.y}px`,
@@ -1293,15 +1283,14 @@ function Inner() {
 								onInteraction={setIsInteracting}
 								onOverlayClick={() => {
 									const candidate = selectedElementCandidate();
-									if (candidate) setAspect(null);
+									if (!candidate) return undefined;
 									return candidate;
 								}}
 								onCropChange={setCrop}
 								initialCrop={() => initialAreaBounds() ?? CROP_ZERO}
 								showBounds={isValid()}
-								aspectRatio={aspect() ?? undefined}
-								snapToRatioEnabled={snapToRatioEnabled()}
-								onContextMenu={(e) => showCropOptionsMenu(e)}
+								snapToRatioEnabled={true}
+								onContextMenu={handleAreaContextMenu}
 							/>
 						</div>
 					);

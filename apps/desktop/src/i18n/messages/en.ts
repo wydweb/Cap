@@ -19,7 +19,7 @@ export const enMessages = {
 	"cropper.startSelection": "Start selection",
 	"language.english": "English",
 	"language.interface": "Interface language",
-	"language.simplifiedChinese": "Simplified Chinese",
+	"language.simplifiedChinese": "简体中文",
 	"language.system": "System default",
 	"settings.account": "Account",
 	"settings.automations": "Automations",

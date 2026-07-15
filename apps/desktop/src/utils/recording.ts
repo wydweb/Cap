@@ -1,12 +1,14 @@
 import { emit } from "@tauri-apps/api/event";
 import * as dialog from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import type { MessageKey, MessageParams } from "~/i18n";
 import type { createOptionsQuery } from "./queries";
 import { commands, type RecordingAction, type RecordingMode } from "./tauri";
 
 export function handleRecordingResult(
 	result: Promise<RecordingAction>,
 	setOptions: ReturnType<typeof createOptionsQuery>["setOptions"] | undefined,
+	t: (key: MessageKey, params?: MessageParams) => string,
 ) {
 	return result
 		.then(async (result) => {
@@ -14,19 +16,19 @@ export function handleRecordingResult(
 			if (result === "InvalidAuthentication") {
 				const buttons = setOptions
 					? {
-							yes: "Login",
-							no: "Switch to Studio mode",
-							cancel: "Cancel",
+							yes: t("recording.login"),
+							no: t("recording.switchToStudio"),
+							cancel: t("common.cancel"),
 						}
 					: {
-							ok: "Login",
-							cancel: "Cancel",
+							ok: t("recording.login"),
+							cancel: t("common.cancel"),
 						};
 
 				const result = await dialog.message(
-					"You must be authenticated to start an instant mode recording. Login or switch to Studio mode.",
+					t("recording.loginRequiredMessage"),
 					{
-						title: "Authentication required",
+						title: t("recording.authenticationRequired"),
 						buttons,
 					},
 				);
@@ -39,13 +41,13 @@ export function handleRecordingResult(
 				}
 			} else if (result === "UpgradeRequired") commands.showWindow("Upgrade");
 			else
-				await dialog.message(`Error: ${result}`, {
-					title: "Error starting recording",
+				await dialog.message(t("recording.startError", { message: result }), {
+					title: t("recording.errorStarting"),
 				});
 		})
 		.catch((err) =>
 			dialog.message(err, {
-				title: "Error starting recording",
+				title: t("recording.errorStarting"),
 				kind: "error",
 			}),
 		);

@@ -35,6 +35,7 @@ import { Transition } from "solid-transition-group";
 import Mode from "~/components/Mode";
 import { RecoveryToast } from "~/components/RecoveryToast";
 import Tooltip from "~/components/Tooltip";
+import { useI18n } from "~/i18n";
 import { Input } from "~/routes/editor/ui";
 import {
 	authStore,
@@ -753,6 +754,7 @@ function MicrophoneSettingsPanel(props: {
 }
 
 function DeviceListPanel(props: DeviceListPanelProps) {
+	const { t } = useI18n();
 	const DB_SCALE = 40;
 	const requestPermission = useRequestPermission();
 	const [focusedIndex, setFocusedIndex] = createSignal(-1);
@@ -918,7 +920,9 @@ function DeviceListPanel(props: DeviceListPanelProps) {
 				</div>
 			</Show>
 			<Show when={props.isLoading}>
-				<div class="py-6 text-sm text-center text-gray-11">Loading...</div>
+				<div class="py-6 text-sm text-center text-gray-11">
+					{t("common.loading")}
+				</div>
 			</Show>
 			<Show when={!props.isLoading && !props.errorMessage}>
 				<button
@@ -940,7 +944,9 @@ function DeviceListPanel(props: DeviceListPanelProps) {
 				>
 					<IconLucideCircleOff class="size-4 shrink-0" />
 					<span class="truncate flex-1">
-						{props.variant === "camera" ? "No Camera" : "No Microphone"}
+						{props.variant === "camera"
+							? t("recording.noCamera")
+							: t("recording.noMicrophone")}
 					</span>
 					<Show when={isNoneSelected()}>
 						<IconLucideCheck class="size-4 shrink-0" />
@@ -1011,6 +1017,7 @@ function DeviceListPanel(props: DeviceListPanelProps) {
 }
 
 function TargetMenuPanel(props: TargetMenuPanelProps & SharedTargetMenuProps) {
+	const { t } = useI18n();
 	const [search, setSearch] = createSignal("");
 	const trimmedSearch = createMemo(() => search().trim());
 	const normalizedQuery = createMemo(() => trimmedSearch().toLowerCase());
@@ -1083,7 +1090,9 @@ function TargetMenuPanel(props: TargetMenuPanelProps & SharedTargetMenuProps) {
 	};
 
 	const settingsSubtitle = () =>
-		props.variant === "camera" ? "Camera settings" : "Microphone settings";
+		props.variant === "camera"
+			? t("recording.cameraSettings")
+			: t("recording.microphoneSettings");
 
 	const settingsTitle = () => {
 		const target = settingsTarget();
@@ -1092,28 +1101,28 @@ function TargetMenuPanel(props: TargetMenuPanelProps & SharedTargetMenuProps) {
 	};
 	const placeholder =
 		props.variant === "display"
-			? "Search displays"
+			? t("target.searchDisplays")
 			: props.variant === "window"
-				? "Search windows"
+				? t("target.searchWindows")
 				: props.variant === "recording"
 					? "Search recordings"
 					: props.variant === "screenshot"
 						? "Search screenshots"
 						: props.variant === "camera"
-							? "Search cameras"
-							: "Search microphones";
+							? t("recording.searchCameras")
+							: t("recording.searchMicrophones");
 	const noResultsMessage =
 		props.variant === "display"
-			? "No matching displays"
+			? t("target.noMatchingDisplays")
 			: props.variant === "window"
-				? "No matching windows"
+				? t("target.noMatchingWindows")
 				: props.variant === "recording"
 					? "No matching recordings"
 					: props.variant === "screenshot"
 						? "No matching screenshots"
 						: props.variant === "camera"
-							? "No matching cameras"
-							: "No matching microphones";
+							? t("recording.noMatchingCameras")
+							: t("recording.noMatchingMicrophones");
 
 	const handleVideoImport = async () => {
 		try {
@@ -1312,7 +1321,9 @@ function TargetMenuPanel(props: TargetMenuPanelProps & SharedTargetMenuProps) {
 							}
 							disabled={cameraProps.disabled}
 							emptyMessage={
-								trimmedSearch() ? noResultsMessage : "No cameras found"
+								trimmedSearch()
+									? noResultsMessage
+									: t("recording.noCamerasFound")
 							}
 							permissions={cameraProps.permissions}
 							deviceSettings={cameraProps.deviceSettings}
@@ -1370,7 +1381,9 @@ function TargetMenuPanel(props: TargetMenuPanelProps & SharedTargetMenuProps) {
 							onSettingsRequested={(mic) => handleSettingsTargetChange(mic)}
 							disabled={micProps.disabled}
 							emptyMessage={
-								trimmedSearch() ? noResultsMessage : "No microphones found"
+								trimmedSearch()
+									? noResultsMessage
+									: t("recording.noMicrophonesFound")
 							}
 							permissions={micProps.permissions}
 							deviceSettings={micProps.deviceSettings}
@@ -1403,10 +1416,10 @@ function TargetMenuPanel(props: TargetMenuPanelProps & SharedTargetMenuProps) {
 					class="flex h-[36px] gap-1 items-center shrink-0 rounded-md px-2 text-xs
 					text-gray-11 transition-colors hover:text-gray-12 hover:bg-gray-4
 					focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-9 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-1"
-					aria-label={inSettingsMode() ? "Back to list" : "Back"}
+					aria-label={t("common.back")}
 				>
 					<IconLucideArrowLeft class="size-3 text-gray-11" />
-					<span class="font-medium text-gray-12">Back</span>
+					<span class="font-medium text-gray-12">{t("common.back")}</span>
 				</button>
 				<Show
 					when={inSettingsMode()}
@@ -1663,6 +1676,7 @@ function MainWindowHelpButton() {
 }
 
 function Page() {
+	const { t } = useI18n();
 	const queryClient = useQueryClient();
 	const { rawOptions, setOptions } = useRecordingOptions();
 	const currentRecording = createCurrentRecordingQuery();
@@ -2114,12 +2128,12 @@ function Page() {
 
 	const displayErrorMessage = () => {
 		if (!displayTargets.error) return undefined;
-		return "Unable to load displays. Try using the Display button.";
+		return t("target.unableToLoadDisplays");
 	};
 
 	const windowErrorMessage = () => {
 		if (!windowTargets.error) return undefined;
-		return "Unable to load windows. Try using the Window button.";
+		return t("target.unableToLoadWindows");
 	};
 
 	const selectDisplayTarget = async (target: CaptureDisplayWithThumbnail) => {
@@ -2488,10 +2502,10 @@ function Page() {
 				await commands.stopRecording();
 			} catch (error) {
 				await dialog.message(
-					`Failed to stop recording: ${
-						error instanceof Error ? error.message : String(error)
-					}`,
-					{ title: "Stop Recording", kind: "error" },
+					t("recording.failedToStop", {
+						message: error instanceof Error ? error.message : String(error),
+					}),
+					{ title: t("recording.stopTitle"), kind: "error" },
 				);
 			}
 		},
@@ -2607,7 +2621,7 @@ function Page() {
 								onClick={() => {
 									toggleTargetMode("display");
 								}}
-								name="Display"
+								name={t("target.display")}
 								class="flex-1 rounded-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 pl-5"
 							/>
 							<TargetDropdownButton
@@ -2628,7 +2642,7 @@ function Page() {
 									});
 								}}
 								aria-haspopup="menu"
-								aria-label="Choose display"
+								aria-label={t("target.chooseDisplay")}
 							/>
 						</div>
 						<div
@@ -2645,7 +2659,7 @@ function Page() {
 								onClick={() => {
 									toggleTargetMode("window");
 								}}
-								name="Window"
+								name={t("target.window")}
 								class="flex-1 rounded-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 pl-5"
 							/>
 							<TargetDropdownButton
@@ -2666,7 +2680,7 @@ function Page() {
 									});
 								}}
 								aria-haspopup="menu"
-								aria-label="Choose window"
+								aria-label={t("target.chooseWindow")}
 							/>
 						</div>
 					</div>
@@ -2678,7 +2692,7 @@ function Page() {
 							onClick={() => {
 								toggleTargetMode("area");
 							}}
-							name="Area"
+							name={t("target.area")}
 							class="flex-1"
 						/>
 						<TargetTypeButton
@@ -2688,7 +2702,7 @@ function Page() {
 							onClick={() => {
 								toggleTargetMode("camera");
 							}}
-							name="Camera Only"
+							name={t("target.cameraOnly")}
 							class="flex-1"
 						/>
 					</div>
@@ -3066,7 +3080,7 @@ function Page() {
 							>
 								<IconCapStopCircle class="size-4" />
 							</Show>
-							<span>Stop Recording</span>
+							<span>{t("recording.stopTitle")}</span>
 						</button>
 					</div>
 				</div>

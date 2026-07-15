@@ -1,5 +1,6 @@
 import { cx } from "cva";
 import { type JSX, Show } from "solid-js";
+import { useI18n } from "~/i18n";
 import { createOptionsQuery } from "~/utils/queries";
 import { commands, type RecordingMode } from "~/utils/tauri";
 
@@ -54,6 +55,7 @@ const ModeOption = (props: ModeOptionProps) => {
 };
 
 const ModeSelect = (props: { onClose?: () => void; standalone?: boolean }) => {
+	const { t } = useI18n();
 	const { rawOptions, setOptions } = createOptionsQuery();
 
 	const handleModeChange = (mode: RecordingMode) => {
@@ -64,20 +66,20 @@ const ModeSelect = (props: { onClose?: () => void; standalone?: boolean }) => {
 	const modeOptions = [
 		{
 			mode: "instant" as const,
-			title: "Instant",
-			description: "Share instantly with a link. Uploads as you record.",
+			title: t("mode.instant"),
+			description: t("mode.instantDescription"),
 			icon: IconCapInstant,
 		},
 		{
 			mode: "studio" as const,
-			title: "Studio",
-			description: "Highest quality local recording for editing later.",
+			title: t("mode.studio"),
+			description: t("mode.studioDescription"),
 			icon: IconCapFilmCut,
 		},
 		{
 			mode: "screenshot" as const,
-			title: "Screenshot",
-			description: "Capture and annotate screenshots instantly.",
+			title: t("mode.screenshot"),
+			description: t("mode.screenshotDescription"),
 			icon: IconCapScreenshot,
 		},
 	];

@@ -92,10 +92,6 @@ import {
 const MIN_SIZE = { width: 150, height: 150 };
 const MIN_SCREENSHOT_SIZE = { width: 1, height: 1 };
 
-const capitalize = (str: string) => {
-	return str.charAt(0).toUpperCase() + str.slice(1);
-};
-
 const findCamera = (cameras: CameraInfo[], id?: DeviceOrModelID | null) => {
 	if (!id) return undefined;
 	return cameras.find((camera) =>
@@ -1708,6 +1704,7 @@ function RecordingControls(props: {
 	onRecordingStart?: () => void;
 	onClose?: () => void;
 }) {
+	const { t } = useI18n();
 	const auth = authStore.createQuery();
 	const { setOptions, rawOptions } = useRecordingOptions();
 
@@ -1764,12 +1761,22 @@ function RecordingControls(props: {
 		if (!rawOptions.micName) return null;
 		return mics().find((name) => name === rawOptions.micName) ?? null;
 	});
+	const modeLabel = () => {
+		switch (rawOptions.mode) {
+			case "instant":
+				return t("mode.instantMode");
+			case "screenshot":
+				return t("mode.screenshotMode");
+			default:
+				return t("mode.studioMode");
+		}
+	};
 
 	const menuModes = async () =>
 		await Menu.new({
 			items: [
 				await CheckMenuItem.new({
-					text: "Studio Mode",
+					text: t("mode.studioMode"),
 					action: () => {
 						setOptions("mode", "studio");
 						commands.setRecordingMode("studio");
@@ -1777,7 +1784,7 @@ function RecordingControls(props: {
 					checked: rawOptions.mode === "studio",
 				}),
 				await CheckMenuItem.new({
-					text: "Instant Mode",
+					text: t("mode.instantMode"),
 					action: () => {
 						setOptions("mode", "instant");
 						commands.setRecordingMode("instant");
@@ -1785,7 +1792,7 @@ function RecordingControls(props: {
 					checked: rawOptions.mode === "instant",
 				}),
 				await CheckMenuItem.new({
-					text: "Screenshot Mode",
+					text: t("mode.screenshotMode"),
 					action: () => {
 						setOptions("mode", "screenshot");
 						commands.setRecordingMode("screenshot");
@@ -1797,24 +1804,24 @@ function RecordingControls(props: {
 
 	const countdownItems = async () => [
 		await CheckMenuItem.new({
-			text: "Off",
+			text: t("recording.off"),
 			action: () => generalSettingsStore.set({ recordingCountdown: 0 }),
 			checked:
 				!generalSetings.data?.recordingCountdown ||
 				generalSetings.data?.recordingCountdown === 0,
 		}),
 		await CheckMenuItem.new({
-			text: "3 seconds",
+			text: t("recording.seconds", { count: 3 }),
 			action: () => generalSettingsStore.set({ recordingCountdown: 3 }),
 			checked: generalSetings.data?.recordingCountdown === 3,
 		}),
 		await CheckMenuItem.new({
-			text: "5 seconds",
+			text: t("recording.seconds", { count: 5 }),
 			action: () => generalSettingsStore.set({ recordingCountdown: 5 }),
 			checked: generalSetings.data?.recordingCountdown === 5,
 		}),
 		await CheckMenuItem.new({
-			text: "10 seconds",
+			text: t("recording.seconds", { count: 10 }),
 			action: () => generalSettingsStore.set({ recordingCountdown: 10 }),
 			checked: generalSetings.data?.recordingCountdown === 10,
 		}),
@@ -1824,7 +1831,7 @@ function RecordingControls(props: {
 		return await Menu.new({
 			items: [
 				await MenuItem.new({
-					text: "Recording Countdown",
+					text: t("recording.countdown"),
 					enabled: false,
 				}),
 				...(await countdownItems()),
@@ -1923,7 +1930,7 @@ function RecordingControls(props: {
 										await commands.closeTargetSelectOverlays();
 									} catch (e) {
 										const message = e instanceof Error ? e.message : String(e);
-										toast.error(`Failed to take screenshot: ${message}`);
+										toast.error(t("target.screenshotFailed", { message }));
 										console.error("Failed to take screenshot", e);
 									}
 									return;
@@ -1952,11 +1959,11 @@ function RecordingControls(props: {
 											msg.includes("no longer available") ||
 											msg.includes("DeviceNotFound")
 										) {
-											toast.error(
-												"Selected microphone is not available. Please select a different microphone in settings.",
-											);
+											toast.error(t("recording.selectedMicrophoneUnavailable"));
 										} else {
-											toast.error(`Failed to start recording: ${msg}`);
+											toast.error(
+												t("recording.failedToStart", { message: msg }),
+											);
 										}
 										// An IPC-level rejection never reaches the backend, so no
 										// StartFailed event fires; the picker flow hid the main
@@ -1991,14 +1998,14 @@ function RecordingControls(props: {
 									<span class="text-[0.95rem] font-medium text-white text-nowrap">
 										{(() => {
 											if (rawOptions.mode === "instant" && !auth.data)
-												return "Sign In To Use";
+												return t("recording.signInToUse");
 											if (rawOptions.mode === "screenshot")
-												return "Take Screenshot";
-											return "Start Recording";
+												return t("recording.takeScreenshot");
+											return t("recording.start");
 										})()}
 									</span>
 									<span class="text-[11px] flex items-center text-nowrap gap-1 transition-opacity duration-200 text-white/90 font-light -mt-0.5">
-										{`${capitalize(rawOptions.mode)} Mode`}
+										{modeLabel()}
 									</span>
 								</div>
 							</div>
@@ -2073,8 +2080,7 @@ function RecordingControls(props: {
 				>
 					<IconCapInfo class="opacity-70 will-change-transform size-3" />
 					<p class="text-sm text-white drop-shadow-md">
-						<span class="opacity-70">What is </span>
-						<span class="font-medium">{capitalize(rawOptions.mode)} Mode</span>?
+						{t("recording.whatIsMode", { mode: modeLabel() })}
 					</p>
 				</div>
 			</div>
@@ -2083,18 +2089,19 @@ function RecordingControls(props: {
 }
 
 function ShowCapFreeWarning(props: { isInstantMode: boolean }) {
+	const { t } = useI18n();
 	const auth = authStore.createQuery();
 
 	return (
 		<Suspense>
 			<Show when={props.isInstantMode && auth.data?.plan?.upgraded === false}>
 				<p class="text-sm text-center max-w-64 text-gray-3 mt-3">
-					Instant Mode recordings are limited to 5 mins,{" "}
+					{t("recording.freeInstantLimit")}{" "}
 					<button
 						class="underline font-bold text-gray-3"
 						onClick={() => commands.showWindow("Upgrade")}
 					>
-						Upgrade to Pro
+						{t("recording.upgradeToPro")}
 					</button>
 				</p>
 			</Show>

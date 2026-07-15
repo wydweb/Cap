@@ -2,6 +2,7 @@ import { HoverCard } from "@kobalte/core/hover-card";
 import { cx } from "cva";
 import { type JSX, Show } from "solid-js";
 
+import { useI18n } from "~/i18n";
 import { useRecordingOptions } from "~/routes/(window-chrome)/OptionsContext";
 import { commands, events, type RecordingMode } from "~/utils/tauri";
 
@@ -18,37 +19,35 @@ type ModeButtonConfig = {
 	iconClass: string;
 };
 
-const MODE_BUTTONS: ModeButtonConfig[] = [
-	{
-		mode: "instant",
-		label: "Instant mode",
-		description:
-			"No rendering required — uploads on the fly so you can share the link the moment you stop.",
-		settingsSection: "instant-quality",
-		icon: (p) => <IconCapInstant {...p} />,
-		iconClass: "size-4 invert dark:invert-0",
-	},
-	{
-		mode: "studio",
-		label: "Studio mode",
-		description:
-			"Records at the highest quality for local rendering later. Opens the Cap editor when you're done.",
-		settingsSection: "studio-quality",
-		icon: (p) => <IconCapFilmCut {...p} />,
-		iconClass: "size-[0.9rem] invert dark:invert-0",
-	},
-	{
-		mode: "screenshot",
-		label: "Screenshot mode",
-		description: "Capture and annotate stills.",
-		settingsSection: null,
-		icon: (p) => <IconCapScreenshot {...p} />,
-		iconClass: "size-[0.9rem] invert dark:invert-0",
-	},
-];
-
 const Mode = (props: ModeProps) => {
+	const { t } = useI18n();
 	const { rawOptions, setOptions } = useRecordingOptions();
+	const modeButtons: ModeButtonConfig[] = [
+		{
+			mode: "instant",
+			label: t("mode.instantMode"),
+			description: t("recording.instantTooltip"),
+			settingsSection: "instant-quality",
+			icon: (p) => <IconCapInstant {...p} />,
+			iconClass: "size-4 invert dark:invert-0",
+		},
+		{
+			mode: "studio",
+			label: t("mode.studioMode"),
+			description: t("recording.studioTooltip"),
+			settingsSection: "studio-quality",
+			icon: (p) => <IconCapFilmCut {...p} />,
+			iconClass: "size-[0.9rem] invert dark:invert-0",
+		},
+		{
+			mode: "screenshot",
+			label: t("mode.screenshotMode"),
+			description: t("recording.screenshotTooltip"),
+			settingsSection: null,
+			icon: (p) => <IconCapScreenshot {...p} />,
+			iconClass: "size-[0.9rem] invert dark:invert-0",
+		},
+	];
 
 	const handleInfoClick = () => {
 		if (props.onInfoClick) {
@@ -74,12 +73,12 @@ const Mode = (props: ModeProps) => {
 				type="button"
 				onClick={handleInfoClick}
 				class="absolute -left-1.5 -top-2 p-1 rounded-full w-fit bg-gray-5 group focus:outline-none"
-				aria-label="Recording mode info"
+				aria-label={t("recording.modeInfo")}
 			>
 				<IconCapInfo class="invert transition-opacity duration-200 size-2.5 dark:invert-0 group-hover:opacity-50" />
 			</button>
 
-			{MODE_BUTTONS.map((button) => {
+			{modeButtons.map((button) => {
 				const isSelected = () => rawOptions.mode === button.mode;
 
 				return (
@@ -125,7 +124,7 @@ const Mode = (props: ModeProps) => {
 												class="flex gap-1.5 items-center px-2 py-1 -mx-1 text-[11px] rounded-md transition-colors text-gray-4 hover:bg-gray-11 hover:text-gray-1"
 											>
 												<IconCapSettings class="size-3" />
-												<span>Quality settings</span>
+												<span>{t("recording.qualitySettings")}</span>
 											</button>
 										)}
 									</Show>

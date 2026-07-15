@@ -23,6 +23,7 @@ import {
 } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import { TransitionGroup } from "solid-transition-group";
+import { useI18n } from "~/i18n";
 import { authStore } from "~/store";
 import { getCameraWindow } from "~/utils/camera-window";
 import { createTauriEventListener } from "~/utils/createEventListener";
@@ -55,8 +56,6 @@ declare global {
 }
 
 const MAX_RECORDING_FOR_FREE = 5 * 60 * 1000;
-const NO_MICROPHONE = "No Microphone";
-const NO_WEBCAM = "No Webcam";
 const FAKE_WINDOW_BOUNDS_NAME = "recording-controls-interactive-area";
 
 export default function () {
@@ -70,6 +69,7 @@ export default function () {
 
 function InProgressRecordingInner() {
 	console.log("[in-progress-recording] Inner component rendering");
+	const { t } = useI18n();
 
 	const [state, setState] = createSignal<State>(
 		window.COUNTDOWN === 0
@@ -147,13 +147,9 @@ function InProgressRecordingInner() {
 	const issueMessages = createMemo(() => {
 		const issues: string[] = [];
 		if (disconnectedInputs.microphone)
-			issues.push(
-				"Microphone disconnected. Silence will be used until it reconnects.",
-			);
+			issues.push(t("recording.microphoneDisconnected"));
 		if (disconnectedInputs.camera)
-			issues.push(
-				"Camera disconnected. Recording continues without camera overlay.",
-			);
+			issues.push(t("recording.cameraDisconnected"));
 		const failure = recordingFailure();
 		if (failure) issues.push(failure);
 		return issues;
@@ -169,10 +165,13 @@ function InProgressRecordingInner() {
 	const dismissIssuePanel = () => setIssuePanelVisible(false);
 	const hasCameraInput = () => optionsQuery.rawOptions.cameraID != null;
 	const microphoneTitle = createMemo(() => {
-		if (disconnectedInputs.microphone) return "Microphone disconnected";
+		if (disconnectedInputs.microphone)
+			return t("recording.microphoneDisconnectedTitle");
 		if (optionsQuery.rawOptions.micName)
-			return `Microphone: ${optionsQuery.rawOptions.micName}`;
-		return "Microphone not configured";
+			return t("recording.microphoneNamed", {
+				name: optionsQuery.rawOptions.micName,
+			});
+		return t("recording.microphoneNotConfigured");
 	});
 
 	const [pauseResumes, setPauseResumes] = createStore<
@@ -516,8 +515,12 @@ function InProgressRecordingInner() {
 	const restartRecording = createMutation(() => ({
 		mutationFn: async () => {
 			const shouldRestart = await dialog.confirm(
-				"Are you sure you want to restart the recording? The current recording will be discarded.",
-				{ title: "Confirm Restart", okLabel: "Restart", cancelLabel: "Cancel" },
+				t("recording.confirmRestartMessage"),
+				{
+					title: t("recording.confirmRestart"),
+					okLabel: t("recording.restart"),
+					cancelLabel: t("common.cancel"),
+				},
 			);
 
 			if (!shouldRestart) return;
@@ -525,7 +528,7 @@ function InProgressRecordingInner() {
 			setTeardownInFlight(true);
 			setState({ variant: "initializing" });
 			try {
-				await handleRecordingResult(commands.restartRecording(), undefined);
+				await handleRecordingResult(commands.restartRecording(), undefined, t);
 			} finally {
 				setTeardownInFlight(false);
 			}
@@ -535,8 +538,12 @@ function InProgressRecordingInner() {
 	const deleteRecording = createMutation(() => ({
 		mutationFn: async () => {
 			const shouldDelete = await dialog.confirm(
-				"Are you sure you want to delete the recording?",
-				{ title: "Confirm Delete", okLabel: "Delete", cancelLabel: "Cancel" },
+				t("recording.confirmDeleteMessage"),
+				{
+					title: t("recording.confirmDelete"),
+					okLabel: t("common.delete"),
+					cancelLabel: t("common.cancel"),
+				},
 			);
 
 			if (!shouldDelete) return;
@@ -631,7 +638,7 @@ function InProgressRecordingInner() {
 			)[] = [];
 			items.push(
 				await CheckMenuItem.new({
-					text: "Show Camera Preview",
+					text: t("recording.showCameraPreview"),
 					checked: cameraWindowOpen(),
 					enabled: startedWithCameraInput && hasCameraInput(),
 					action: () => {
@@ -644,14 +651,14 @@ function InProgressRecordingInner() {
 			items.push(
 				await MenuItem.new({
 					text: startedWithMicrophone
-						? "Microphone"
-						: "Microphone (locked for this recording)",
+						? t("recording.microphone")
+						: t("recording.microphoneLocked"),
 					enabled: false,
 				}),
 			);
 			items.push(
 				await CheckMenuItem.new({
-					text: NO_MICROPHONE,
+					text: t("recording.noMicrophone"),
 					checked: optionsQuery.rawOptions.micName == null,
 					enabled: startedWithMicrophone,
 					action: () => updateMicInput.mutate(null),
@@ -671,14 +678,14 @@ function InProgressRecordingInner() {
 			items.push(
 				await MenuItem.new({
 					text: startedWithCameraInput
-						? "Webcam"
-						: "Webcam (locked for this recording)",
+						? t("recording.webcam")
+						: t("recording.webcamLocked"),
 					enabled: false,
 				}),
 			);
 			items.push(
 				await CheckMenuItem.new({
-					text: NO_WEBCAM,
+					text: t("recording.noWebcam"),
 					checked: !hasCameraInput(),
 					enabled: startedWithCameraInput,
 					action: () => updateCameraInput.mutate(null),
@@ -776,7 +783,7 @@ function InProgressRecordingInner() {
 							type="button"
 							class="text-red-9 transition hover:text-red-11"
 							onClick={() => dismissIssuePanel()}
-							aria-label="Dismiss recording issue"
+							aria-label={t("recording.issueDismiss")}
 						>
 							<IconLucideX class="size-4" />
 						</button>
@@ -792,7 +799,7 @@ function InProgressRecordingInner() {
 										<div class="flex flex-row items-center gap-1.5 rounded-lg py-1 px-2 text-gray-12">
 											<IconLucideLoader2 class="size-4 animate-spin" />
 											<span class="text-[0.875rem] font-medium tabular-nums">
-												Starting
+												{t("recording.starting")}
 											</span>
 										</div>
 									}
@@ -812,8 +819,8 @@ function InProgressRecordingInner() {
 											requestStopRecording();
 										}}
 										onClick={requestStopRecording}
-										title="Stop recording"
-										aria-label="Stop recording"
+										title={t("recording.stop")}
+										aria-label={t("recording.stop")}
 									>
 										<IconCapStopCircle />
 										<span class="text-[0.875rem] font-medium tabular-nums">
@@ -918,11 +925,15 @@ function InProgressRecordingInner() {
 											disabled={toggleMicMute.isPending}
 											onClick={() => toggleMicMute.mutate()}
 											title={
-												micMuted() ? "Unmute microphone" : "Mute microphone"
+												micMuted()
+													? t("recording.unmuteMicrophone")
+													: t("recording.muteMicrophone")
 											}
 											aria-pressed={micMuted() ? "true" : "false"}
 											aria-label={
-												micMuted() ? "Unmute microphone" : "Mute microphone"
+												micMuted()
+													? t("recording.unmuteMicrophone")
+													: t("recording.muteMicrophone")
 											}
 										>
 											{micMuted() ? (
@@ -947,7 +958,7 @@ function InProgressRecordingInner() {
 									<Show when={hasCameraInput() && disconnectedInputs.camera}>
 										<div
 											class="flex h-8 w-8 items-center justify-center"
-											title="Camera disconnected - recording continues without camera overlay"
+											title={t("recording.cameraDisconnectedTitle")}
 										>
 											<IconLucideVideoOff class="size-5 text-amber-11" />
 										</div>
@@ -957,7 +968,7 @@ function InProgressRecordingInner() {
 											<div
 												class="flex h-8 w-8 items-center justify-center"
 												title={reason()}
-												aria-label="Recording quality degraded"
+												aria-label={t("recording.qualityDegraded")}
 											>
 												<div class="size-2 rounded-full bg-amber-9 animate-pulse" />
 											</div>
@@ -970,8 +981,8 @@ function InProgressRecordingInner() {
 												onClick={() => {
 													void closeStartingBar();
 												}}
-												title="Close recording controls"
-												aria-label="Close recording controls"
+												title={t("recording.closeControls")}
+												aria-label={t("recording.closeControls")}
 											>
 												<IconLucideX class="size-5" />
 											</ActionButton>
@@ -987,7 +998,7 @@ function InProgressRecordingInner() {
 												onClick={() => toggleIssuePanel()}
 												title={issueMessages().join(", ")}
 												aria-pressed={issuePanelVisible() ? "true" : "false"}
-												aria-label="Recording issues"
+												aria-label={t("recording.issues")}
 											>
 												<IconLucideAlertTriangle class="size-5" />
 											</ActionButton>
@@ -999,13 +1010,13 @@ function InProgressRecordingInner() {
 												onClick={() => togglePause.mutate()}
 												title={
 													state().variant === "paused"
-														? "Resume recording"
-														: "Pause recording"
+														? t("recording.resume")
+														: t("recording.pause")
 												}
 												aria-label={
 													state().variant === "paused"
-														? "Resume recording"
-														: "Pause recording"
+														? t("recording.resume")
+														: t("recording.pause")
 												}
 											>
 												{state().variant === "paused" ? (
@@ -1019,16 +1030,16 @@ function InProgressRecordingInner() {
 										<ActionButton
 											disabled={restartRecording.isPending || isCountdown()}
 											onClick={() => restartRecording.mutate()}
-											title="Restart recording"
-											aria-label="Restart recording"
+											title={t("recording.restart")}
+											aria-label={t("recording.restart")}
 										>
 											<IconCapRestart />
 										</ActionButton>
 										<ActionButton
 											disabled={deleteRecording.isPending || isCountdown()}
 											onClick={() => deleteRecording.mutate()}
-											title="Delete recording"
-											aria-label="Delete recording"
+											title={t("recording.delete")}
+											aria-label={t("recording.delete")}
 										>
 											<IconCapTrash />
 										</ActionButton>
@@ -1039,8 +1050,8 @@ function InProgressRecordingInner() {
 											onClick={() => {
 												void openRecordingSettingsMenu();
 											}}
-											title="Recording settings"
-											aria-label="Recording settings"
+											title={t("recording.settings")}
+											aria-label={t("recording.settings")}
 										>
 											<IconCapSettings class="size-5" />
 										</ActionButton>

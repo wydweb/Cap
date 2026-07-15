@@ -12,7 +12,6 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
-use tauri::Manager;
 use tauri::menu::{IconMenuItem, MenuId, PredefinedMenuItem, Submenu};
 use tauri::{
     AppHandle,
@@ -20,6 +19,7 @@ use tauri::{
     menu::{Menu, MenuItem},
     tray::{TrayIcon, TrayIconBuilder},
 };
+use tauri::{Listener, Manager};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use tauri_specta::Event;
@@ -28,6 +28,15 @@ const PREVIOUS_ITEM_PREFIX: &str = "previous_item_";
 const MAX_PREVIOUS_ITEMS: usize = 6;
 const MAX_TITLE_LENGTH: usize = 30;
 const THUMBNAIL_SIZE: u32 = 32;
+static USE_SIMPLIFIED_CHINESE: AtomicBool = AtomicBool::new(false);
+
+fn tray_label(english: &'static str, simplified_chinese: &'static str) -> &'static str {
+    if USE_SIMPLIFIED_CHINESE.load(Ordering::Relaxed) {
+        simplified_chinese
+    } else {
+        english
+    }
+}
 
 #[cfg(target_os = "linux")]
 #[derive(Clone, Copy)]
@@ -320,18 +329,18 @@ fn create_previous_submenu(
     cache: &PreviousItemsCache,
 ) -> tauri::Result<Submenu<tauri::Wry>> {
     if cache.items.is_empty() {
-        let submenu = Submenu::with_id(app, "previous", "Previous", false)?;
+        let submenu = Submenu::with_id(app, "previous", tray_label("Previous", "最近项目"), false)?;
         submenu.append(&MenuItem::with_id(
             app,
             "previous_empty",
-            "No recent items",
+            tray_label("No recent items", "暂无最近项目"),
             false,
             None::<&str>,
         )?)?;
         return Ok(submenu);
     }
 
-    let submenu = Submenu::with_id(app, "previous", "Previous", true)?;
+    let submenu = Submenu::with_id(app, "previous", tray_label("Previous", "最近项目"), true)?;
 
     for item in &cache.items {
         let id = TrayItem::PreviousItem(item.path.to_string_lossy().to_string());
@@ -384,15 +393,28 @@ pub(crate) fn refresh_tray_menu_for_app(app: &AppHandle) {
 fn create_mode_submenu(app: &AppHandle) -> tauri::Result<Submenu<tauri::Wry>> {
     let current_mode = get_current_mode(app);
 
-    let submenu = Submenu::with_id(app, "select_mode", "Select Mode", true)?;
+    let submenu = Submenu::with_id(
+        app,
+        "select_mode",
+        tray_label("Select Mode", "选择模式"),
+        true,
+    )?;
 
     let modes = [
-        (TrayItem::ModeStudio, RecordingMode::Studio, "Studio"),
-        (TrayItem::ModeInstant, RecordingMode::Instant, "Instant"),
+        (
+            TrayItem::ModeStudio,
+            RecordingMode::Studio,
+            tray_label("Studio", "工作室"),
+        ),
+        (
+            TrayItem::ModeInstant,
+            RecordingMode::Instant,
+            tray_label("Instant", "即时分享"),
+        ),
         (
             TrayItem::ModeScreenshot,
             RecordingMode::Screenshot,
-            "Screenshot",
+            tray_label("Screenshot", "截图"),
         ),
     ];
 
@@ -419,7 +441,7 @@ fn build_tray_menu(app: &AppHandle, cache: &PreviousItemsCache) -> tauri::Result
                 &MenuItem::with_id(
                     app,
                     TrayItem::RequestPermissions,
-                    "Request Permissions",
+                    tray_label("Request Permissions", "请求权限"),
                     true,
                     None::<&str>,
                 )?,
@@ -431,7 +453,13 @@ fn build_tray_menu(app: &AppHandle, cache: &PreviousItemsCache) -> tauri::Result
                     false,
                     None::<&str>,
                 )?,
-                &MenuItem::with_id(app, TrayItem::Quit, "Quit Cap", true, None::<&str>)?,
+                &MenuItem::with_id(
+                    app,
+                    TrayItem::Quit,
+                    tray_label("Quit Cap", "退出 Cap"),
+                    true,
+                    None::<&str>,
+                )?,
             ],
         );
     }
@@ -446,7 +474,7 @@ fn build_tray_menu(app: &AppHandle, cache: &PreviousItemsCache) -> tauri::Result
     menu.append(&MenuItem::with_id(
         app,
         TrayItem::OpenCap,
-        "Open Main Window",
+        tray_label("Open Main Window", "打开主窗口"),
         true,
         None::<&str>,
     )?)?;
@@ -455,21 +483,21 @@ fn build_tray_menu(app: &AppHandle, cache: &PreviousItemsCache) -> tauri::Result
         menu.append(&MenuItem::with_id(
             app,
             TrayItem::RecordDisplay,
-            "Screenshot Display",
+            tray_label("Screenshot Display", "截取显示器"),
             true,
             None::<&str>,
         )?)?;
         menu.append(&MenuItem::with_id(
             app,
             TrayItem::RecordWindow,
-            "Screenshot Window",
+            tray_label("Screenshot Window", "截取窗口"),
             true,
             None::<&str>,
         )?)?;
         menu.append(&MenuItem::with_id(
             app,
             TrayItem::RecordArea,
-            "Screenshot Area",
+            tray_label("Screenshot Area", "区域截图"),
             true,
             None::<&str>,
         )?)?;
@@ -477,28 +505,28 @@ fn build_tray_menu(app: &AppHandle, cache: &PreviousItemsCache) -> tauri::Result
         menu.append(&MenuItem::with_id(
             app,
             TrayItem::RecordDisplay,
-            "Record Display",
+            tray_label("Record Display", "录制显示器"),
             true,
             None::<&str>,
         )?)?;
         menu.append(&MenuItem::with_id(
             app,
             TrayItem::RecordWindow,
-            "Record Window",
+            tray_label("Record Window", "录制窗口"),
             true,
             None::<&str>,
         )?)?;
         menu.append(&MenuItem::with_id(
             app,
             TrayItem::RecordArea,
-            "Record Area",
+            tray_label("Record Area", "录制区域"),
             true,
             None::<&str>,
         )?)?;
         menu.append(&MenuItem::with_id(
             app,
             TrayItem::TakeScreenshot,
-            "Take a Screenshot",
+            tray_label("Take a Screenshot", "截图"),
             true,
             None::<&str>,
         )?)?;
@@ -507,7 +535,7 @@ fn build_tray_menu(app: &AppHandle, cache: &PreviousItemsCache) -> tauri::Result
     menu.append(&MenuItem::with_id(
         app,
         TrayItem::ImportVideo,
-        "Import Media...",
+        tray_label("Import Media...", "导入媒体…"),
         true,
         None::<&str>,
     )?)?;
@@ -520,21 +548,21 @@ fn build_tray_menu(app: &AppHandle, cache: &PreviousItemsCache) -> tauri::Result
     menu.append(&MenuItem::with_id(
         app,
         TrayItem::ViewAllRecordings,
-        "View all recordings",
+        tray_label("View all recordings", "查看所有录制"),
         true,
         None::<&str>,
     )?)?;
     menu.append(&MenuItem::with_id(
         app,
         TrayItem::ViewAllScreenshots,
-        "View all screenshots",
+        tray_label("View all screenshots", "查看所有截图"),
         true,
         None::<&str>,
     )?)?;
     menu.append(&MenuItem::with_id(
         app,
         TrayItem::OpenSettings,
-        "Settings",
+        tray_label("Settings", "设置"),
         true,
         None::<&str>,
     )?)?;
@@ -543,7 +571,7 @@ fn build_tray_menu(app: &AppHandle, cache: &PreviousItemsCache) -> tauri::Result
     menu.append(&MenuItem::with_id(
         app,
         TrayItem::UploadLogs,
-        "Upload Logs",
+        tray_label("Upload Logs", "上传日志"),
         true,
         None::<&str>,
     )?)?;
@@ -557,7 +585,7 @@ fn build_tray_menu(app: &AppHandle, cache: &PreviousItemsCache) -> tauri::Result
     menu.append(&MenuItem::with_id(
         app,
         TrayItem::Quit,
-        "Quit Cap",
+        tray_label("Quit Cap", "退出 Cap"),
         true,
         None::<&str>,
     )?)?;
@@ -764,6 +792,19 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
 
     app.manage(TrayMenuCache {
         cache: cache.clone(),
+    });
+
+    let app_handle = app.clone();
+    app.listen("interface-locale-changed", move |event| {
+        let Ok(locale) = serde_json::from_str::<String>(event.payload()) else {
+            return;
+        };
+        let use_simplified_chinese = locale == "zh-CN";
+        if USE_SIMPLIFIED_CHINESE.swap(use_simplified_chinese, Ordering::Relaxed)
+            != use_simplified_chinese
+        {
+            refresh_tray_menu_for_app(&app_handle);
+        }
     });
 
     let menu = {

@@ -1,3 +1,4 @@
+import { emit } from "@tauri-apps/api/event";
 import {
 	createContext,
 	createEffect,
@@ -66,6 +67,7 @@ export function I18nProvider(props: ParentProps) {
 		if (typeof document === "undefined") return;
 		document.documentElement.lang = locale();
 		document.documentElement.dir = "ltr";
+		void emit("interface-locale-changed", locale());
 	});
 
 	onMount(() => {

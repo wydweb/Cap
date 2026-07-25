@@ -3066,10 +3066,16 @@ impl ShowCapWindow {
 
         #[cfg(windows)]
         {
+            let browser_args = windows_webview2_browser_args();
+            let browser_args_json = serde_json::to_string(&browser_args)
+                .expect("Failed to serialize Windows WebView2 browser arguments");
             builder = builder
                 .decorations(false)
                 .zoom_hotkeys_enabled(false)
-                .additional_browser_args(&windows_webview2_browser_args());
+                .additional_browser_args(&browser_args)
+                .initialization_script(format!(
+                    "window.__CAP__ = window.__CAP__ ?? {{}}; window.__CAP__.windowsWebview2BrowserArgs = {browser_args_json};"
+                ));
         }
 
         // Linux has no native macOS-style traffic lights, so we drop the window
@@ -3603,8 +3609,13 @@ pub async fn apply_macos_liquid_glass_background(
 
         _window
             .run_on_main_thread(move || {
-                let result =
-                    crate::platform::apply_liquid_glass_background(&window, _enabled, _radius);
+                let result = if window.label() == CapWindowId::Main.label() {
+                    crate::platform::apply_main_window_liquid_glass_background(
+                        &window, _enabled, _radius,
+                    )
+                } else {
+                    crate::platform::apply_liquid_glass_background(&window, _enabled, _radius)
+                };
                 let _ = tx.send(result);
             })
             .map_err(|error| error.to_string())?;

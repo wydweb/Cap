@@ -136,6 +136,9 @@ export const zhCNMessages = {
 	"settings.recordingDescription": "设置录制期间及停止后的行为。",
 	"settings.countdown": "倒计时",
 	"settings.countdownDescription": "开始录制前等待一段时间。",
+	"settings.confirmWithoutMicrophone": "未选择麦克风时录制前确认",
+	"settings.confirmWithoutMicrophoneDescription":
+		"未选择麦克风或所选麦克风不可用时，开始录制前要求确认。",
 	"settings.mainWindowOnStart": "录制开始时的主窗口",
 	"settings.mainWindowOnStartDescription": "选择录制开始后主窗口的行为。",
 	"settings.close": "关闭",
@@ -232,6 +235,9 @@ export const zhCNMessages = {
 	"recording.noCamera": "不使用摄像头",
 	"recording.noCamerasFound": "未找到摄像头",
 	"recording.noMicrophone": "不使用麦克风",
+	"recording.noMicrophoneDetected": "未检测到麦克风",
+	"recording.noMicrophoneWarning":
+		"本次录制不会包含你的声音。请选择麦克风，或继续无麦克风录制。",
 	"recording.noMicrophonesFound": "未找到麦克风",
 	"recording.noSystemAudio": "不录制系统音频",
 	"recording.noMatchingCameras": "没有匹配的摄像头",
@@ -246,6 +252,7 @@ export const zhCNMessages = {
 	"recording.recordSystemAudio": "录制系统音频",
 	"recording.systemAudioRequirement": "系统音频捕获需要 macOS 13.0 或更高版本",
 	"recording.pause": "暂停录制",
+	"recording.preparing": "正在准备...",
 	"recording.qualitySettings": "画质设置",
 	"recording.qualityDegraded": "录制质量下降",
 	"recording.modeInfo": "录制模式说明",
@@ -254,7 +261,9 @@ export const zhCNMessages = {
 		"以最高画质录制到本地，停止后在 Cap 编辑器中打开。",
 	"recording.screenshotTooltip": "截图并添加标注。",
 	"recording.recordingModes": "录制模式",
+	"recording.recordWithoutMicrophone": "无麦克风录制",
 	"recording.restart": "重新录制",
+	"recording.goBack": "返回",
 	"recording.resume": "继续录制",
 	"recording.seconds": "{count} 秒",
 	"recording.selectedMicrophoneUnavailable":

@@ -144,6 +144,10 @@ export const enMessages = {
 		"Behaviour while you record and after you stop.",
 	"settings.countdown": "Countdown",
 	"settings.countdownDescription": "Wait before the recording starts.",
+	"settings.confirmWithoutMicrophone":
+		"Confirm before recording without a microphone",
+	"settings.confirmWithoutMicrophoneDescription":
+		"Require confirmation when no microphone is selected or the selected microphone is unavailable.",
 	"settings.mainWindowOnStart": "Main window when recording starts",
 	"settings.mainWindowOnStartDescription":
 		"What happens to the main window once a recording begins.",
@@ -255,6 +259,9 @@ export const enMessages = {
 	"recording.noCamera": "No Camera",
 	"recording.noCamerasFound": "No cameras found",
 	"recording.noMicrophone": "No Microphone",
+	"recording.noMicrophoneDetected": "No microphone detected",
+	"recording.noMicrophoneWarning":
+		"This recording will not include your voice. Select a microphone, or continue without one.",
 	"recording.noMicrophonesFound": "No microphones found",
 	"recording.noSystemAudio": "No System Audio",
 	"recording.noMatchingCameras": "No matching cameras",
@@ -270,6 +277,7 @@ export const enMessages = {
 	"recording.systemAudioRequirement":
 		"System audio capture requires macOS 13.0 or later",
 	"recording.pause": "Pause recording",
+	"recording.preparing": "Preparing...",
 	"recording.qualitySettings": "Quality settings",
 	"recording.qualityDegraded": "Recording quality degraded",
 	"recording.modeInfo": "Recording mode info",
@@ -279,7 +287,9 @@ export const enMessages = {
 		"Records at the highest quality for local rendering later. Opens the Cap editor when you're done.",
 	"recording.screenshotTooltip": "Capture and annotate stills.",
 	"recording.recordingModes": "Recording Modes",
+	"recording.recordWithoutMicrophone": "Record without microphone",
 	"recording.restart": "Restart recording",
+	"recording.goBack": "Go back",
 	"recording.resume": "Resume recording",
 	"recording.seconds": "{count} seconds",
 	"recording.selectedMicrophoneUnavailable":

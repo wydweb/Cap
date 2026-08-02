@@ -49,6 +49,7 @@ impl SegmentBounds {
 
     /// Remaps a scalar in [0,1] so values inside the outer `snap_ratio` band
     /// stick to the edges: [r, 1-r] -> [0, 1], clamped.
+    #[cfg(test)]
     pub(crate) fn snap_to_edges(scalar: f64, snap_ratio: f64) -> f64 {
         if snap_ratio <= 0.0 {
             return scalar;
@@ -69,6 +70,7 @@ impl SegmentBounds {
     /// full [0, 1] range is exactly the set of in-bounds framings and a focus
     /// snapped to 1.0 puts the frame corner-flush with the content corner —
     /// no centered-viewport band, which would make corners unreachable.
+    #[cfg(test)]
     pub(crate) fn calculate_follow_center(
         focus_pos: (f64, f64),
         edge_snap_ratio: f64,

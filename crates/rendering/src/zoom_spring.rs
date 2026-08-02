@@ -50,11 +50,7 @@ const INSTANT_SNAP_WINDOW_SECS: f64 = 0.1;
 /// bound moves the viewport by at most (bound - 1) of the card: sub-pixel.
 const CENTER_PREAIM_MAX_AMOUNT: f32 = 1.0005;
 const CURSOR_VIEWPORT_MARGIN_RATIO: f32 = 0.02;
-
-/// Greedy click-cluster bounding-box limits, as a fraction of the visible
-/// zoomed viewport (50% width x 70% height).
-const CLUSTER_WIDTH_RATIO: f64 = 0.5;
-const CLUSTER_HEIGHT_RATIO: f64 = 0.7;
+const CURSOR_FOLLOW_RESPONSE_MULTIPLIER: f32 = 3.0;
 
 /// Fallback focus when a segment has no usable cursor data.
 const FALLBACK_FOCUS: (f64, f64) = (0.5, 0.5);
@@ -114,66 +110,101 @@ impl CursorCropMap {
 
 #[derive(Debug)]
 pub(crate) struct ClickCluster {
-    min_x: f64,
-    max_x: f64,
-    min_y: f64,
-    max_y: f64,
+    focus_x: f64,
+    focus_y: f64,
+    target_x: f64,
+    target_y: f64,
+    follows_cursor: bool,
     start_time_ms: f64,
-    last_time_ms: f64,
 }
 
 impl ClickCluster {
-    fn new(x: f64, y: f64, time_ms: f64) -> Self {
+    fn new(x: f64, y: f64, time_ms: f64, zoom_amount: f64, follows_cursor: bool) -> Self {
+        let focus_x = clamp_viewport_focus(x, zoom_amount);
+        let focus_y = clamp_viewport_focus(y, zoom_amount);
         Self {
-            min_x: x,
-            max_x: x,
-            min_y: y,
-            max_y: y,
+            focus_x,
+            focus_y,
+            target_x: focus_x,
+            target_y: focus_y,
+            follows_cursor,
             start_time_ms: time_ms,
-            last_time_ms: time_ms,
         }
     }
 
-    fn can_add(&self, x: f64, y: f64, max_w: f64, max_h: f64) -> bool {
-        let new_w = self.max_x.max(x) - self.min_x.min(x);
-        let new_h = self.max_y.max(y) - self.min_y.min(y);
-        new_w <= max_w && new_h <= max_h
+    fn update_target(&mut self, x: f64, y: f64, zoom_amount: f64) {
+        if self.follows_cursor {
+            self.target_x = clamp_viewport_focus(x, zoom_amount);
+            self.target_y = clamp_viewport_focus(y, zoom_amount);
+        }
     }
 
-    fn add(&mut self, x: f64, y: f64, time_ms: f64) {
-        self.min_x = self.min_x.min(x);
-        self.max_x = self.max_x.max(x);
-        self.min_y = self.min_y.min(y);
-        self.max_y = self.max_y.max(y);
-        self.last_time_ms = time_ms;
+    fn recentered(
+        &self,
+        x: f64,
+        y: f64,
+        time_ms: f64,
+        zoom_amount: f64,
+        safe_zone_inset_ratio: f64,
+    ) -> Option<Self> {
+        let safe_half_span = (0.5 - safe_zone_inset_ratio.clamp(0.0, 0.49)) / zoom_amount.max(1.0);
+        let mut focus_x = self.focus_x;
+        let mut focus_y = self.focus_y;
+
+        if x < self.focus_x - safe_half_span || x > self.focus_x + safe_half_span {
+            focus_x = clamp_viewport_focus(x, zoom_amount);
+        }
+        if y < self.focus_y - safe_half_span || y > self.focus_y + safe_half_span {
+            focus_y = clamp_viewport_focus(y, zoom_amount);
+        }
+
+        if focus_x == self.focus_x && focus_y == self.focus_y {
+            None
+        } else {
+            Some(Self {
+                focus_x,
+                focus_y,
+                target_x: focus_x,
+                target_y: focus_y,
+                follows_cursor: true,
+                start_time_ms: time_ms,
+            })
+        }
     }
 
     fn center(&self) -> (f64, f64) {
-        (
-            (self.min_x + self.max_x) / 2.0,
-            (self.min_y + self.max_y) / 2.0,
-        )
+        (self.target_x, self.target_y)
     }
 }
 
-/// Greedily clusters ALL mouse movement inside a segment's RECORDING-time
-/// range into bounding boxes limited to a fraction of the visible zoomed
-/// viewport. Every move participates — not just clicks — so the camera
-/// re-aims whenever the cursor travels outside the current cluster's
-/// dead-zone box (hovering into a corner pans the view there even without a
-/// click). Click positions are inherently part of the move stream, so they
-/// need no separate pass.
+fn clamp_viewport_focus(focus: f64, zoom_amount: f64) -> f64 {
+    let half_span = 0.5 / zoom_amount.max(1.0);
+    focus.clamp(half_span, 1.0 - half_span)
+}
+
+fn focus_to_travel_center(focus: (f64, f64), zoom_amount: f64) -> (f64, f64) {
+    if zoom_amount <= 1.0 + f64::EPSILON {
+        return FALLBACK_FOCUS;
+    }
+
+    let travel = zoom_amount - 1.0;
+    let convert = |value: f64| ((value * zoom_amount - 0.5) / travel).clamp(0.0, 1.0);
+    (convert(focus.0), convert(focus.1))
+}
+
+/// Builds persistent camera targets from all cursor movement inside a
+/// segment. The target stays fixed inside the safe zone; crossing it recenters
+/// only the escaped axis on the cursor.
 pub(crate) fn build_clusters(
     cursor_events: &CursorEvents,
     segment_start_secs: f64,
     segment_end_secs: f64,
     zoom_amount: f64,
+    safe_zone_inset_ratio: f64,
     crop: Option<CursorCropMap>,
 ) -> Vec<ClickCluster> {
     let start_ms = segment_start_secs * 1000.0;
     let end_ms = segment_end_secs * 1000.0;
-    let cluster_w = CLUSTER_WIDTH_RATIO / zoom_amount.max(1.0);
-    let cluster_h = CLUSTER_HEIGHT_RATIO / zoom_amount.max(1.0);
     // Clustering happens in CONTENT UV space: dead-zone box limits are
     // fractions of the visible (cropped) viewport, so raw display UVs must be
     // remapped before distances mean what the constants say they mean.
@@ -210,7 +241,7 @@ pub(crate) fn build_clusters(
 
         if let Some(evt) = fallback {
             let (x, y) = map_uv(evt.x, evt.y);
-            return vec![ClickCluster::new(x, y, evt.time_ms)];
+            return vec![ClickCluster::new(x, y, evt.time_ms, zoom_amount, false)];
         }
         return vec![];
     }
@@ -218,15 +249,17 @@ pub(crate) fn build_clusters(
     let mut clusters = Vec::new();
     let first = events_in_range[0];
     let (first_x, first_y) = map_uv(first.x, first.y);
-    let mut current = ClickCluster::new(first_x, first_y, first.time_ms);
+    let mut current = ClickCluster::new(first_x, first_y, first.time_ms, zoom_amount, false);
 
     for evt in &events_in_range[1..] {
         let (x, y) = map_uv(evt.x, evt.y);
-        if current.can_add(x, y, cluster_w, cluster_h) {
-            current.add(x, y, evt.time_ms);
-        } else {
+        if let Some(next) =
+            current.recentered(x, y, evt.time_ms, zoom_amount, safe_zone_inset_ratio)
+        {
             clusters.push(current);
-            current = ClickCluster::new(x, y, evt.time_ms);
+            current = next;
+        } else {
+            current.update_target(x, y, zoom_amount);
         }
     }
     clusters.push(current);
@@ -234,18 +267,12 @@ pub(crate) fn build_clusters(
     clusters
 }
 
-/// The active cluster at `time_ms` (RECORDING time) is the last cluster whose
-/// first event time is <= t; the spring smooths the discrete re-aims.
-pub(crate) fn cluster_center_at_time(
-    clusters: &[ClickCluster],
-    time_ms: f64,
-) -> Option<(f64, f64)> {
+fn cluster_at_time(clusters: &[ClickCluster], time_ms: f64) -> Option<&ClickCluster> {
     clusters
         .iter()
         .rev()
         .find(|c| c.start_time_ms <= time_ms)
         .or_else(|| clusters.first())
-        .map(|c| c.center())
 }
 
 fn cursor_position_at(moves: &[CursorMoveEvent], time_ms: f64) -> Option<XY<f64>> {
@@ -292,6 +319,37 @@ fn constrain_center_to_cursor(center: XY<f32>, cursor: XY<f32>, amount: f32) -> 
         constrain_axis(center.x, cursor.x),
         constrain_axis(center.y, cursor.y),
     )
+}
+
+fn recenter_on_cursor_outside_safe_zone(
+    center: XY<f32>,
+    cursor: XY<f32>,
+    amount: f32,
+    safe_zone_inset_ratio: f32,
+) -> XY<f32> {
+    if amount <= 1.0 + f32::EPSILON {
+        return center;
+    }
+
+    let travel = amount - 1.0;
+    let safe_half_span = (0.5 - safe_zone_inset_ratio.clamp(0.0, 0.49)) / amount;
+    let viewport_center = XY::new(
+        (center.x * travel + 0.5) / amount,
+        (center.y * travel + 0.5) / amount,
+    );
+    let cursor_outside = cursor.x < viewport_center.x - safe_half_span
+        || cursor.x > viewport_center.x + safe_half_span
+        || cursor.y < viewport_center.y - safe_half_span
+        || cursor.y > viewport_center.y + safe_half_span;
+
+    if cursor_outside {
+        XY::new(
+            ((cursor.x * amount - 0.5) / travel).clamp(0.0, 1.0),
+            ((cursor.y * amount - 0.5) / travel).clamp(0.0, 1.0),
+        )
+    } else {
+        center
+    }
 }
 
 /// One entry of the timeline-time -> recording-time mapping derived from
@@ -403,6 +461,7 @@ struct StepTargets {
     segment_active: bool,
     snap: bool,
     cursor: Option<XY<f32>>,
+    fast_cursor_follow: bool,
 }
 
 /// Deterministic, lazily precomputed zoom transform timeline.
@@ -501,6 +560,7 @@ impl ZoomTransformTimeline {
                         recording_start,
                         recording_end,
                         segment.amount,
+                        segment.edge_snap_ratio,
                         crop,
                     ))
                 }
@@ -707,15 +767,20 @@ impl ZoomTransformTimeline {
         rendered_cursor: XY<f64>,
     ) -> InterpolatedZoom {
         let cursor = self
-            .has_active_auto_segment(f64::from(timeline_secs))
-            .then(|| self.map_cursor(rendered_cursor));
+            .active_auto_segment(f64::from(timeline_secs))
+            .map(|segment| {
+                (
+                    self.map_cursor(rendered_cursor),
+                    segment.edge_snap_ratio as f32,
+                )
+            });
         self.sample_inner(timeline_secs, cursor)
     }
 
     fn sample_inner(
         &self,
         timeline_secs: f32,
-        rendered_cursor: Option<XY<f32>>,
+        rendered_cursor: Option<(XY<f32>, f32)>,
     ) -> InterpolatedZoom {
         let Some(last) = self.samples.len().checked_sub(1) else {
             return InterpolatedZoom {
@@ -736,11 +801,19 @@ impl ZoomTransformTimeline {
         let center_x = a.center.x + (b.center.x - a.center.x) * frac;
         let center_y = a.center.y + (b.center.y - a.center.y) * frac;
         let activity = a.activity + (b.activity - a.activity) * frac;
-        let center = rendered_cursor
-            .or_else(|| self.active_auto_cursor_at(f64::from(timeline_secs)))
-            .map_or(XY::new(center_x, center_y), |cursor| {
-                constrain_center_to_cursor(XY::new(center_x, center_y), cursor, amount)
-            });
+        let center = if let Some((cursor, safe_zone_inset_ratio)) = rendered_cursor {
+            recenter_on_cursor_outside_safe_zone(
+                XY::new(center_x, center_y),
+                cursor,
+                amount,
+                safe_zone_inset_ratio,
+            )
+        } else {
+            self.active_auto_cursor_at(f64::from(timeline_secs))
+                .map_or(XY::new(center_x, center_y), |cursor| {
+                    constrain_center_to_cursor(XY::new(center_x, center_y), cursor, amount)
+                })
+        };
 
         InterpolatedZoom {
             t: f64::from(activity).clamp(0.0, 1.0),
@@ -812,7 +885,12 @@ impl ZoomTransformTimeline {
                 state.center_sim.set_position(targets.center);
                 state.center_sim.set_velocity(XY::new(0.0, 0.0));
             }
-            state.center_sim.run(STEP_MS as f32);
+            let center_step_ms = if targets.fast_cursor_follow {
+                STEP_MS as f32 * CURSOR_FOLLOW_RESPONSE_MULTIPLIER
+            } else {
+                STEP_MS as f32
+            };
+            state.center_sim.run(center_step_ms);
             state.aux_sim.run(STEP_MS as f32);
         }
 
@@ -877,10 +955,11 @@ impl ZoomTransformTimeline {
                 } else {
                     1.0
                 };
-                let (center, cursor) = match segment.mode {
+                let (center, cursor, fast_cursor_follow) = match segment.mode {
                     ZoomMode::Manual { x, y } => (
                         (f64::from(x).clamp(0.0, 1.0), f64::from(y).clamp(0.0, 1.0)),
                         None,
+                        false,
                     ),
                     ZoomMode::Auto => {
                         let recording_ms = map_timeline_to_recording_secs(
@@ -889,16 +968,14 @@ impl ZoomTransformTimeline {
                             self.recording_clip,
                             self.prefer_outgoing,
                         ) * 1000.0;
-                        let focus = self.clusters[index]
+                        let cluster = self.clusters[index]
                             .as_deref()
-                            .and_then(|clusters| cluster_center_at_time(clusters, recording_ms))
-                            .unwrap_or(FALLBACK_FOCUS);
+                            .and_then(|clusters| cluster_at_time(clusters, recording_ms));
+                        let focus = cluster.map(ClickCluster::center).unwrap_or(FALLBACK_FOCUS);
                         (
-                            SegmentBounds::calculate_follow_center(
-                                (focus.0.clamp(0.0, 1.0), focus.1.clamp(0.0, 1.0)),
-                                segment.edge_snap_ratio,
-                            ),
+                            focus_to_travel_center(focus, amount),
                             self.cursor_at_recording_ms(recording_ms),
+                            cluster.is_some_and(|cluster| cluster.follows_cursor),
                         )
                     }
                 };
@@ -910,6 +987,7 @@ impl ZoomTransformTimeline {
                     segment_active: true,
                     snap,
                     cursor,
+                    fast_cursor_follow,
                 }
             }
             None => StepTargets {
@@ -921,6 +999,7 @@ impl ZoomTransformTimeline {
                 segment_active: false,
                 snap,
                 cursor: None,
+                fast_cursor_follow: false,
             },
         }
     }
@@ -937,25 +1016,23 @@ impl ZoomTransformTimeline {
         XY::new(x.clamp(0.0, 1.0) as f32, y.clamp(0.0, 1.0) as f32)
     }
 
-    fn has_active_auto_segment(&self, timeline_secs: f64) -> bool {
+    fn active_auto_segment(&self, timeline_secs: f64) -> Option<&ZoomSegment> {
         self.zoom_segments
             .iter()
             .find(|segment| timeline_secs > segment.start && timeline_secs <= segment.end)
-            .is_some_and(|segment| matches!(segment.mode, ZoomMode::Auto))
+            .filter(|segment| matches!(segment.mode, ZoomMode::Auto))
     }
 
     fn active_auto_cursor_at(&self, timeline_secs: f64) -> Option<XY<f32>> {
-        self.has_active_auto_segment(timeline_secs)
-            .then_some(())
-            .and_then(|()| {
-                let recording_ms = map_timeline_to_recording_secs(
-                    &self.time_map,
-                    timeline_secs,
-                    self.recording_clip,
-                    self.prefer_outgoing,
-                ) * 1000.0;
-                self.cursor_at_recording_ms(recording_ms)
-            })
+        self.active_auto_segment(timeline_secs).and_then(|_| {
+            let recording_ms = map_timeline_to_recording_secs(
+                &self.time_map,
+                timeline_secs,
+                self.recording_clip,
+                self.prefer_outgoing,
+            ) * 1000.0;
+            self.cursor_at_recording_ms(recording_ms)
+        })
     }
 }
 
@@ -1326,6 +1403,57 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn safe_zone_holds_until_exit_then_recenters_on_the_final_cursor() {
+        let cursor = CursorEvents {
+            moves: vec![
+                move_event(0.0, 0.5, 0.5),
+                move_event(100.0, 0.6, 0.58),
+                move_event(200.0, 0.7, 0.58),
+                move_event(300.0, 0.72, 0.6),
+            ],
+            clicks: vec![],
+        };
+        let clusters = build_clusters(&cursor, 0.0, 1.0, 2.0, 0.25, None);
+
+        assert_eq!(clusters.len(), 2);
+        assert_eq!(clusters[0].center(), (0.5, 0.5));
+        assert_eq!(clusters[1].center(), (0.72, 0.6));
+    }
+
+    #[test]
+    fn follow_target_places_the_cursor_at_the_viewport_center() {
+        for amount in [2.0, 4.0, 8.0] {
+            let cursor = (0.7, 0.6);
+            let center = focus_to_travel_center(cursor, amount);
+            let viewport_center = (
+                (center.0 * (amount - 1.0) + 0.5) / amount,
+                (center.1 * (amount - 1.0) + 0.5) / amount,
+            );
+
+            assert!((viewport_center.0 - cursor.0).abs() < 1e-9);
+            assert!((viewport_center.1 - cursor.1).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn rendered_cursor_recenters_both_axes_after_leaving_the_safe_zone() {
+        let cursor = CursorEvents {
+            moves: vec![move_event(0.0, 0.5, 0.5)],
+            clicks: vec![],
+        };
+        let segments = vec![auto_segment(0.5, 5.0, 2.0)];
+        let mut timeline = timeline_for(&segments, &cursor, 6.0);
+        timeline.precompute();
+
+        let rendered_cursor = XY::new(0.7, 0.6);
+        let zoom = timeline.sample_with_cursor(3.0, rendered_cursor);
+        let (left, top, size) = visible_viewport(&zoom);
+
+        assert!((left + size * 0.5 - rendered_cursor.x).abs() < 1e-6);
+        assert!((top + size * 0.5 - rendered_cursor.y).abs() < 1e-6);
     }
 
     #[test]

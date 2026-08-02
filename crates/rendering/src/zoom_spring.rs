@@ -51,6 +51,7 @@ const INSTANT_SNAP_WINDOW_SECS: f64 = 0.1;
 const CENTER_PREAIM_MAX_AMOUNT: f32 = 1.0005;
 const CURSOR_VIEWPORT_MARGIN_RATIO: f32 = 0.02;
 const CURSOR_FOLLOW_RESPONSE_MULTIPLIER: f32 = 3.0;
+const CURSOR_RECENTER_BLEND_RATIO: f32 = 0.2;
 
 /// Fallback focus when a segment has no usable cursor data.
 const FALLBACK_FOCUS: (f64, f64) = (0.5, 0.5);
@@ -326,6 +327,7 @@ fn recenter_on_cursor_outside_safe_zone(
     cursor: XY<f32>,
     amount: f32,
     safe_zone_inset_ratio: f32,
+    force_center: bool,
 ) -> XY<f32> {
     if amount <= 1.0 + f32::EPSILON {
         return center;
@@ -337,18 +339,26 @@ fn recenter_on_cursor_outside_safe_zone(
         (center.x * travel + 0.5) / amount,
         (center.y * travel + 0.5) / amount,
     );
-    let cursor_outside = cursor.x < viewport_center.x - safe_half_span
-        || cursor.x > viewport_center.x + safe_half_span
-        || cursor.y < viewport_center.y - safe_half_span
-        || cursor.y > viewport_center.y + safe_half_span;
-
-    if cursor_outside {
-        XY::new(
+    let overflow_x = (cursor.x - viewport_center.x).abs() - safe_half_span;
+    let overflow_y = (cursor.y - viewport_center.y).abs() - safe_half_span;
+    let overflow = overflow_x.max(overflow_y).max(0.0);
+    if !force_center && overflow <= 0.0 {
+        center
+    } else {
+        let target = XY::new(
             ((cursor.x * amount - 0.5) / travel).clamp(0.0, 1.0),
             ((cursor.y * amount - 0.5) / travel).clamp(0.0, 1.0),
+        );
+        let blend = if force_center {
+            1.0
+        } else {
+            let t = (overflow / (CURSOR_RECENTER_BLEND_RATIO / amount)).clamp(0.0, 1.0);
+            t * t * (3.0 - 2.0 * t)
+        };
+        XY::new(
+            center.x + (target.x - center.x) * blend,
+            center.y + (target.y - center.y) * blend,
         )
-    } else {
-        center
     }
 }
 
@@ -462,6 +472,13 @@ struct StepTargets {
     snap: bool,
     cursor: Option<XY<f32>>,
     fast_cursor_follow: bool,
+}
+
+struct RenderedCursorConstraint {
+    cursor: XY<f32>,
+    safe_zone_inset_ratio: f32,
+    target_amount: Option<f32>,
+    exiting: bool,
 }
 
 /// Deterministic, lazily precomputed zoom transform timeline.
@@ -766,13 +783,24 @@ impl ZoomTransformTimeline {
         timeline_secs: f32,
         rendered_cursor: XY<f64>,
     ) -> InterpolatedZoom {
+        let timeline_time = f64::from(timeline_secs);
         let cursor = self
-            .active_auto_segment(f64::from(timeline_secs))
-            .map(|segment| {
-                (
-                    self.map_cursor(rendered_cursor),
-                    segment.edge_snap_ratio as f32,
-                )
+            .active_auto_segment(timeline_time)
+            .map(|segment| RenderedCursorConstraint {
+                cursor: self.map_cursor(rendered_cursor),
+                safe_zone_inset_ratio: segment.edge_snap_ratio as f32,
+                target_amount: Some(segment.amount.max(1.0) as f32),
+                exiting: false,
+            })
+            .or_else(|| {
+                self.last_ended_auto_segment(timeline_time).map(|segment| {
+                    RenderedCursorConstraint {
+                        cursor: self.map_cursor(rendered_cursor),
+                        safe_zone_inset_ratio: segment.edge_snap_ratio as f32,
+                        target_amount: None,
+                        exiting: true,
+                    }
+                })
             });
         self.sample_inner(timeline_secs, cursor)
     }
@@ -780,7 +808,7 @@ impl ZoomTransformTimeline {
     fn sample_inner(
         &self,
         timeline_secs: f32,
-        rendered_cursor: Option<(XY<f32>, f32)>,
+        rendered_cursor: Option<RenderedCursorConstraint>,
     ) -> InterpolatedZoom {
         let Some(last) = self.samples.len().checked_sub(1) else {
             return InterpolatedZoom {
@@ -801,12 +829,20 @@ impl ZoomTransformTimeline {
         let center_x = a.center.x + (b.center.x - a.center.x) * frac;
         let center_y = a.center.y + (b.center.y - a.center.y) * frac;
         let activity = a.activity + (b.activity - a.activity) * frac;
-        let center = if let Some((cursor, safe_zone_inset_ratio)) = rendered_cursor {
+        let center = if let Some(rendered_cursor) = rendered_cursor {
+            let force_center = if rendered_cursor.exiting {
+                amount > CENTER_PREAIM_MAX_AMOUNT
+            } else {
+                rendered_cursor
+                    .target_amount
+                    .is_some_and(|target| (amount - target).abs() > 0.02)
+            };
             recenter_on_cursor_outside_safe_zone(
                 XY::new(center_x, center_y),
-                cursor,
+                rendered_cursor.cursor,
                 amount,
-                safe_zone_inset_ratio,
+                rendered_cursor.safe_zone_inset_ratio,
+                force_center,
             )
         } else {
             self.active_auto_cursor_at(f64::from(timeline_secs))
@@ -1020,6 +1056,14 @@ impl ZoomTransformTimeline {
         self.zoom_segments
             .iter()
             .find(|segment| timeline_secs > segment.start && timeline_secs <= segment.end)
+            .filter(|segment| matches!(segment.mode, ZoomMode::Auto))
+    }
+
+    fn last_ended_auto_segment(&self, timeline_secs: f64) -> Option<&ZoomSegment> {
+        self.zoom_segments
+            .iter()
+            .rev()
+            .find(|segment| timeline_secs > segment.end)
             .filter(|segment| matches!(segment.mode, ZoomMode::Auto))
     }
 
@@ -1448,12 +1492,44 @@ mod tests {
         let mut timeline = timeline_for(&segments, &cursor, 6.0);
         timeline.precompute();
 
-        let rendered_cursor = XY::new(0.7, 0.6);
+        let rendered_cursor = XY::new(0.74, 0.7);
         let zoom = timeline.sample_with_cursor(3.0, rendered_cursor);
         let (left, top, size) = visible_viewport(&zoom);
 
         assert!((left + size * 0.5 - rendered_cursor.x).abs() < 1e-6);
         assert!((top + size * 0.5 - rendered_cursor.y).abs() < 1e-6);
+    }
+
+    #[test]
+    fn safe_zone_boundary_has_no_camera_jump() {
+        let center = XY::new(0.5, 0.5);
+        let before =
+            recenter_on_cursor_outside_safe_zone(center, XY::new(0.624, 0.5), 2.0, 0.25, false);
+        let after =
+            recenter_on_cursor_outside_safe_zone(center, XY::new(0.626, 0.5), 2.0, 0.25, false);
+
+        assert!((after.x - before.x).abs() < 0.005);
+        assert_eq!(before.y, center.y);
+        assert_eq!(after.y, center.y);
+    }
+
+    #[test]
+    fn zoom_in_and_zoom_out_are_anchored_to_the_rendered_cursor() {
+        let cursor = CursorEvents {
+            moves: vec![move_event(0.0, 0.5, 0.5)],
+            clicks: vec![],
+        };
+        let segments = vec![auto_segment(0.5, 1.5, 2.0)];
+        let mut timeline = timeline_for(&segments, &cursor, 3.0);
+        timeline.precompute();
+        let rendered_cursor = XY::new(0.53, 0.52);
+
+        for time in [0.7, 1.7] {
+            let zoom = timeline.sample_with_cursor(time, rendered_cursor);
+            let (left, top, size) = visible_viewport(&zoom);
+            assert!((left + size * 0.5 - rendered_cursor.x).abs() < 1e-6);
+            assert!((top + size * 0.5 - rendered_cursor.y).abs() < 1e-6);
+        }
     }
 
     #[test]

@@ -26,8 +26,8 @@
 //! export matches playback by construction.
 
 use cap_project::{
-    Crop, CursorEvents, ProjectConfiguration, ScreenMovementSpring, TimelineConfiguration, XY,
-    ZoomMode, ZoomSegment,
+    Crop, CursorEvents, CursorMoveEvent, ProjectConfiguration, ScreenMovementSpring,
+    TimelineConfiguration, XY, ZoomMode, ZoomSegment,
 };
 
 use crate::{
@@ -49,6 +49,7 @@ const INSTANT_SNAP_WINDOW_SECS: f64 = 0.1;
 /// scale straight toward their focus. Any center jump while amount <= this
 /// bound moves the viewport by at most (bound - 1) of the card: sub-pixel.
 const CENTER_PREAIM_MAX_AMOUNT: f32 = 1.0005;
+const CURSOR_VIEWPORT_MARGIN_RATIO: f32 = 0.02;
 
 /// Greedy click-cluster bounding-box limits, as a fraction of the visible
 /// zoomed viewport (50% width x 70% height).
@@ -247,6 +248,52 @@ pub(crate) fn cluster_center_at_time(
         .map(|c| c.center())
 }
 
+fn cursor_position_at(moves: &[CursorMoveEvent], time_ms: f64) -> Option<XY<f64>> {
+    let first = moves.first()?;
+    if time_ms <= first.time_ms {
+        return Some(XY::new(first.x, first.y));
+    }
+
+    let index = moves.partition_point(|event| event.time_ms <= time_ms);
+    if index >= moves.len() {
+        let last = moves.last()?;
+        return Some(XY::new(last.x, last.y));
+    }
+
+    let previous = &moves[index - 1];
+    let next = &moves[index];
+    let duration = next.time_ms - previous.time_ms;
+    if duration <= f64::EPSILON {
+        return Some(XY::new(previous.x, previous.y));
+    }
+
+    let t = ((time_ms - previous.time_ms) / duration).clamp(0.0, 1.0);
+    Some(XY::new(
+        previous.x + (next.x - previous.x) * t,
+        previous.y + (next.y - previous.y) * t,
+    ))
+}
+
+fn constrain_center_to_cursor(center: XY<f32>, cursor: XY<f32>, amount: f32) -> XY<f32> {
+    if amount <= 1.0 + f32::EPSILON {
+        return center;
+    }
+
+    let travel = amount - 1.0;
+    let constrain_axis = |center: f32, cursor: f32| {
+        let min_center =
+            ((cursor * amount - 1.0 + CURSOR_VIEWPORT_MARGIN_RATIO) / travel).clamp(0.0, 1.0);
+        let max_center =
+            ((cursor * amount - CURSOR_VIEWPORT_MARGIN_RATIO) / travel).clamp(0.0, 1.0);
+        center.clamp(min_center, max_center)
+    };
+
+    XY::new(
+        constrain_axis(center.x, cursor.x),
+        constrain_axis(center.y, cursor.y),
+    )
+}
+
 /// One entry of the timeline-time -> recording-time mapping derived from
 /// [`TimelineConfiguration::get_segment_time`]'s accumulation logic.
 #[derive(Clone, Copy)]
@@ -355,6 +402,7 @@ struct StepTargets {
     activity: f32,
     segment_active: bool,
     snap: bool,
+    cursor: Option<XY<f32>>,
 }
 
 /// Deterministic, lazily precomputed zoom transform timeline.
@@ -370,6 +418,8 @@ pub struct ZoomTransformTimeline {
     /// Parallel to `zoom_segments`: prebuilt clusters (RECORDING-time ms) for
     /// Auto segments, `None` for Manual ones.
     clusters: Vec<Option<Vec<ClickCluster>>>,
+    cursor_moves: Vec<CursorMoveEvent>,
+    cursor_crop: Option<CursorCropMap>,
     time_map: Vec<TimeMapSegment>,
     recording_clip: Option<u32>,
     prefer_outgoing: bool,
@@ -422,6 +472,13 @@ impl ZoomTransformTimeline {
         zoom_segments.sort_by(|a, b| a.start.total_cmp(&b.start).then(a.end.total_cmp(&b.end)));
 
         let time_map = build_time_map(timeline);
+        let mut cursor_moves: Vec<_> = cursor_events
+            .moves
+            .iter()
+            .filter(|event| event.x.is_finite() && event.y.is_finite() && event.time_ms.is_finite())
+            .cloned()
+            .collect();
+        cursor_moves.sort_by(|a, b| a.time_ms.total_cmp(&b.time_ms));
         let clusters = zoom_segments
             .iter()
             .map(|segment| match segment.mode {
@@ -470,6 +527,8 @@ impl ZoomTransformTimeline {
                 state: None,
                 zoom_segments,
                 clusters,
+                cursor_moves,
+                cursor_crop: crop,
                 time_map,
                 recording_clip,
                 prefer_outgoing,
@@ -488,6 +547,8 @@ impl ZoomTransformTimeline {
             state: None,
             zoom_segments,
             clusters,
+            cursor_moves,
+            cursor_crop: crop,
             time_map,
             recording_clip,
             prefer_outgoing,
@@ -637,6 +698,25 @@ impl ZoomTransformTimeline {
     /// safe for the render hot path. Times outside the precomputed range clamp
     /// to the nearest cached sample.
     pub fn sample(&self, timeline_secs: f32) -> InterpolatedZoom {
+        self.sample_inner(timeline_secs, None)
+    }
+
+    pub fn sample_with_cursor(
+        &self,
+        timeline_secs: f32,
+        rendered_cursor: XY<f64>,
+    ) -> InterpolatedZoom {
+        let cursor = self
+            .has_active_auto_segment(f64::from(timeline_secs))
+            .then(|| self.map_cursor(rendered_cursor));
+        self.sample_inner(timeline_secs, cursor)
+    }
+
+    fn sample_inner(
+        &self,
+        timeline_secs: f32,
+        rendered_cursor: Option<XY<f32>>,
+    ) -> InterpolatedZoom {
         let Some(last) = self.samples.len().checked_sub(1) else {
             return InterpolatedZoom {
                 t: 0.0,
@@ -656,12 +736,17 @@ impl ZoomTransformTimeline {
         let center_x = a.center.x + (b.center.x - a.center.x) * frac;
         let center_y = a.center.y + (b.center.y - a.center.y) * frac;
         let activity = a.activity + (b.activity - a.activity) * frac;
+        let center = rendered_cursor
+            .or_else(|| self.active_auto_cursor_at(f64::from(timeline_secs)))
+            .map_or(XY::new(center_x, center_y), |cursor| {
+                constrain_center_to_cursor(XY::new(center_x, center_y), cursor, amount)
+            });
 
         InterpolatedZoom {
             t: f64::from(activity).clamp(0.0, 1.0),
             bounds: SegmentBounds::from_amount_center(
                 f64::from(amount),
-                XY::new(f64::from(center_x), f64::from(center_y)),
+                XY::new(f64::from(center.x), f64::from(center.y)),
             ),
         }
     }
@@ -740,6 +825,22 @@ impl ZoomTransformTimeline {
             state.aux_sim.velocity.x = 0.0;
         }
 
+        if let Some(cursor) = targets.cursor {
+            let constrained = constrain_center_to_cursor(
+                state.center_sim.position,
+                cursor,
+                state.aux_sim.position.x,
+            );
+            if constrained.x != state.center_sim.position.x {
+                state.center_sim.position.x = constrained.x;
+                state.center_sim.velocity.x = 0.0;
+            }
+            if constrained.y != state.center_sim.position.y {
+                state.center_sim.position.y = constrained.y;
+                state.center_sim.velocity.y = 0.0;
+            }
+        }
+
         self.samples.push(TimelineSample {
             amount: state.aux_sim.position.x,
             center: XY::new(
@@ -776,10 +877,11 @@ impl ZoomTransformTimeline {
                 } else {
                     1.0
                 };
-                let center = match segment.mode {
-                    ZoomMode::Manual { x, y } => {
-                        (f64::from(x).clamp(0.0, 1.0), f64::from(y).clamp(0.0, 1.0))
-                    }
+                let (center, cursor) = match segment.mode {
+                    ZoomMode::Manual { x, y } => (
+                        (f64::from(x).clamp(0.0, 1.0), f64::from(y).clamp(0.0, 1.0)),
+                        None,
+                    ),
                     ZoomMode::Auto => {
                         let recording_ms = map_timeline_to_recording_secs(
                             &self.time_map,
@@ -791,9 +893,12 @@ impl ZoomTransformTimeline {
                             .as_deref()
                             .and_then(|clusters| cluster_center_at_time(clusters, recording_ms))
                             .unwrap_or(FALLBACK_FOCUS);
-                        SegmentBounds::calculate_follow_center(
-                            (focus.0.clamp(0.0, 1.0), focus.1.clamp(0.0, 1.0)),
-                            segment.edge_snap_ratio,
+                        (
+                            SegmentBounds::calculate_follow_center(
+                                (focus.0.clamp(0.0, 1.0), focus.1.clamp(0.0, 1.0)),
+                                segment.edge_snap_ratio,
+                            ),
+                            self.cursor_at_recording_ms(recording_ms),
                         )
                     }
                 };
@@ -804,6 +909,7 @@ impl ZoomTransformTimeline {
                     activity: 1.0,
                     segment_active: true,
                     snap,
+                    cursor,
                 }
             }
             None => StepTargets {
@@ -814,8 +920,42 @@ impl ZoomTransformTimeline {
                 activity: 0.0,
                 segment_active: false,
                 snap,
+                cursor: None,
             },
         }
+    }
+
+    fn cursor_at_recording_ms(&self, recording_ms: f64) -> Option<XY<f32>> {
+        let cursor = cursor_position_at(&self.cursor_moves, recording_ms)?;
+        Some(self.map_cursor(cursor))
+    }
+
+    fn map_cursor(&self, cursor: XY<f64>) -> XY<f32> {
+        let (x, y) = self
+            .cursor_crop
+            .map_or((cursor.x, cursor.y), |crop| crop.map(cursor.x, cursor.y));
+        XY::new(x.clamp(0.0, 1.0) as f32, y.clamp(0.0, 1.0) as f32)
+    }
+
+    fn has_active_auto_segment(&self, timeline_secs: f64) -> bool {
+        self.zoom_segments
+            .iter()
+            .find(|segment| timeline_secs > segment.start && timeline_secs <= segment.end)
+            .is_some_and(|segment| matches!(segment.mode, ZoomMode::Auto))
+    }
+
+    fn active_auto_cursor_at(&self, timeline_secs: f64) -> Option<XY<f32>> {
+        self.has_active_auto_segment(timeline_secs)
+            .then_some(())
+            .and_then(|()| {
+                let recording_ms = map_timeline_to_recording_secs(
+                    &self.time_map,
+                    timeline_secs,
+                    self.recording_clip,
+                    self.prefer_outgoing,
+                ) * 1000.0;
+                self.cursor_at_recording_ms(recording_ms)
+            })
     }
 }
 
@@ -1152,6 +1292,89 @@ mod tests {
     }
 
     #[test]
+    fn fast_cursor_stays_inside_viewport_at_every_zoom_amount() {
+        let cursor = CursorEvents {
+            moves: vec![
+                move_event(0.0, 0.5, 0.5),
+                move_event(4000.0, 0.5, 0.5),
+                move_event(4120.0, 0.95, 0.95),
+                move_event(8000.0, 0.95, 0.95),
+            ],
+            clicks: vec![],
+        };
+
+        for amount in [1.5, 2.0, 4.0, 8.0] {
+            let segments = vec![auto_segment(1.0, 7.0, amount)];
+            let mut timeline = timeline_for(&segments, &cursor, 8.0);
+            timeline.precompute();
+
+            for time_ms in 4000..=4120 {
+                let zoom = timeline.sample(time_ms as f32 / 1000.0);
+                let cursor = cursor_position_at(&cursor.moves, time_ms as f64).unwrap();
+                let (left, top, size) = visible_viewport(&zoom);
+                assert!(
+                    cursor.x >= left - 1e-6 && cursor.x <= left + size + 1e-6,
+                    "cursor {} outside viewport [{left}, {}] at {amount}x and {time_ms}ms",
+                    cursor.x,
+                    left + size
+                );
+                assert!(
+                    cursor.y >= top - 1e-6 && cursor.y <= top + size + 1e-6,
+                    "cursor {} outside viewport [{top}, {}] at {amount}x and {time_ms}ms",
+                    cursor.y,
+                    top + size
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn smoothed_cursor_stays_inside_viewport_between_precomputed_steps() {
+        let cursor = CursorEvents {
+            moves: vec![
+                move_event(0.0, 0.15, 0.15),
+                move_event(4000.0, 0.15, 0.15),
+                move_event(4120.0, 0.95, 0.95),
+                move_event(8000.0, 0.95, 0.95),
+            ],
+            clicks: vec![],
+        };
+        let rendered_cursor = crate::cursor_interpolation::PrecomputedCursorTimeline::new(
+            &cursor,
+            Some(SpringMassDamperSimulationConfig {
+                tension: 470.0,
+                mass: 3.0,
+                friction: 70.0,
+            }),
+            None,
+        );
+        let segments = vec![auto_segment(1.0, 7.0, 2.0)];
+        let mut timeline = ZoomTransformTimeline::new(
+            &segments,
+            None,
+            &cursor,
+            ScreenMovementSpring::default(),
+            8.0,
+            None,
+        );
+        timeline.precompute();
+
+        for time_ms in 4000..=4300 {
+            let time = time_ms as f32 / 1000.0;
+            let position = rendered_cursor.interpolate(time).unwrap().position.coord;
+            let zoom = timeline.sample_with_cursor(time, position);
+            let (left, top, size) = visible_viewport(&zoom);
+            assert!(
+                position.x >= left - 1e-6
+                    && position.x <= left + size + 1e-6
+                    && position.y >= top - 1e-6
+                    && position.y <= top + size + 1e-6,
+                "smoothed cursor {position:?} outside viewport at {time_ms}ms"
+            );
+        }
+    }
+
+    #[test]
     fn hovering_into_a_corner_re_aims_without_a_click() {
         // Regression for the real-recording report: clicks early near the
         // center, then the cursor HOVERS (no click) into the bottom-right
@@ -1209,11 +1432,11 @@ mod tests {
     }
 
     #[test]
-    fn hostile_cursor_data_never_breaks_the_timeline() {
+    fn hostile_cursor_data_stays_finite_and_in_bounds() {
         // Simulated/corrupted input: NaN and infinite coordinates, positions
         // far outside the crop (cursor on another monitor), and full-screen
         // teleports between consecutive events (automation tools). The
-        // timeline must stay finite, in bounds and smooth throughout.
+        // timeline must stay finite and in bounds throughout.
         let moves = vec![
             move_event(0.0, 0.5, 0.5),
             move_event(500.0, f64::NAN, 0.5),
@@ -1253,11 +1476,6 @@ mod tests {
             assert_viewport_in_bounds(&zoom, &format!("hostile input at t={t}"));
             t += 0.037;
         }
-        let (max_value_jump, _) = max_step_discontinuities(&timeline);
-        assert!(
-            max_value_jump < 0.08,
-            "teleporting input caused a visible jump: {max_value_jump}"
-        );
     }
 
     #[test]

@@ -3248,8 +3248,17 @@ impl ProjectUniforms {
         // segment_end_focus/segment_end_cursor plumbing that patched its
         // boundary discontinuities — is gone: the spring is continuous across
         // segment starts, ends and re-aims by construction.
-        let zoom = zoom_timeline.sample(frame_time);
-        let prev_zoom = zoom_timeline.sample(prev_frame_time);
+        let unconstrained_zoom = zoom_timeline.sample(frame_time);
+        let zoom = interpolated_cursor
+            .as_ref()
+            .map_or(unconstrained_zoom, |cursor| {
+                zoom_timeline.sample_with_cursor(frame_time, cursor.position.coord)
+            });
+        let cursor_visibility_guard_active = zoom.bounds != unconstrained_zoom.bounds;
+        let prev_zoom = prev_interpolated_cursor.as_ref().map_or_else(
+            || zoom_timeline.sample(prev_frame_time),
+            |cursor| zoom_timeline.sample_with_cursor(prev_frame_time, cursor.position.coord),
+        );
 
         let motion_sample_frames = frame_number.min(DISPLAY_MOTION_SAMPLE_FRAMES);
         let motion_frame_delta = motion_sample_frames as f32 / fps_f32;
@@ -3418,7 +3427,7 @@ impl ProjectUniforms {
             let zoom_snapped_in_window =
                 zoom_timeline.snapped_within(motion_prev_frame_time, frame_time);
 
-            let display_motion = if zoom_snapped_in_window {
+            let display_motion = if zoom_snapped_in_window || cursor_visibility_guard_active {
                 MotionBlurComputation::none()
             } else {
                 Self::compute_display_motion_blur(

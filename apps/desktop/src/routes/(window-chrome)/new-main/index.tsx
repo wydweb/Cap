@@ -3118,6 +3118,7 @@ function Page() {
 			class="flex relative flex-col px-[13px] gap-2 pb-[8px] h-full min-h-0 text-(--text-primary)"
 		>
 			<WindowChromeHeader
+				hideMaximize
 				maximized={isExpanded()}
 				onMaximize={() => void toggleMainWindowExpanded()}
 			>

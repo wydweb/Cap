@@ -119,7 +119,13 @@ function Header() {
 			{isWindows && (
 				<CaptionControlsWindows11
 					class="ml-auto!"
-					maximizable={ctx.state()?.onMaximize ? true : undefined}
+					maximizable={
+						ctx.state()?.hideMaximize
+							? false
+							: ctx.state()?.onMaximize
+								? true
+								: undefined
+					}
 					maximized={ctx.state()?.maximized}
 					onMaximize={ctx.state()?.onMaximize}
 				/>
@@ -128,7 +134,9 @@ function Header() {
 				<CaptionControlsMacOS
 					class="mr-auto! ml-3"
 					showMinimize={false}
-					showZoom={ctx.state()?.onMaximize !== undefined}
+					showZoom={
+						!ctx.state()?.hideMaximize && ctx.state()?.onMaximize !== undefined
+					}
 					onZoom={ctx.state()?.onMaximize}
 				/>
 			)}

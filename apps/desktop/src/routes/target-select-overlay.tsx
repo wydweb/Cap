@@ -706,8 +706,12 @@ function Inner() {
 												onRecordingStart={() => {
 													setOriginalCameraBounds(null);
 													if (options.mode === "screenshot") {
-														// The window variant has always dismissed the picker
-														// for screenshots too; keep that, tagged as such.
+														// Only mark the dismissal here. takeScreenshot is
+														// invoked from THIS webview right after, and closing
+														// destroys the webview before the invoke is dispatched,
+														// so the screenshot silently never happens. The start
+														// handler hides these windows and closes them once the
+														// capture is done.
 														if (options.targetModeSource === "editor") {
 															setOptions({
 																targetMode: null,
@@ -720,7 +724,6 @@ function Inner() {
 																targetModeDismissal: "screenshot",
 															});
 														}
-														commands.closeTargetSelectOverlays();
 													} else {
 														dismissPickerForRecordingStart();
 													}
@@ -2146,11 +2149,16 @@ function RecordingControls(props: {
 				if (shouldOpenEditor) {
 					await commands.showWindow({ ScreenshotEditor: { path } });
 				}
-				await commands.closeTargetSelectOverlays();
 			} catch (e) {
 				const message = e instanceof Error ? e.message : String(e);
 				toast.error(t("target.screenshotFailed", { message }));
 				console.error("Failed to take screenshot", e);
+			} finally {
+				await commands
+					.closeTargetSelectOverlays()
+					.catch((e) =>
+						console.error("Failed to close target select overlays", e),
+					);
 			}
 			return;
 		}

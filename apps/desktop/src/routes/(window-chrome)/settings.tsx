@@ -23,7 +23,7 @@ import { SignInButton } from "~/components/SignInButton";
 import { useI18n } from "~/i18n";
 
 import { authStore, userProfileStore } from "~/store";
-import { trackEvent } from "~/utils/analytics";
+import { resetUser, trackEvent } from "~/utils/analytics";
 import { createSignInMutation } from "~/utils/auth";
 import { commands } from "~/utils/tauri";
 import {
@@ -151,6 +151,7 @@ export default function Settings(props: RouteSectionProps) {
 	>(null);
 	const clearLocalAuth = async () => {
 		setAuth(undefined);
+		resetUser();
 		queryClient.removeQueries({ queryKey: ["settings-user-profile"] });
 		await Promise.all([
 			authStore.set(undefined),

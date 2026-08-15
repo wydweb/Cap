@@ -449,6 +449,82 @@ impl Default for BackgroundBlurConfig {
     }
 }
 
+/// Parametric color grade for a single layer (screen or camera). Every field
+/// except `intensity` has 0 as its identity, so a default struct renders
+/// exactly like no grade at all. Adjustment fields are normalized: -1..1 for
+/// bipolar controls, 0..1 for unipolar ones.
+#[derive(Type, Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ColorCorrection {
+    /// UI preset id ("none", "cinematic", ..., or "custom"). The renderer
+    /// ignores this; the numeric fields below are the source of truth.
+    pub preset: String,
+    /// 0..1 master strength applied to every adjustment except `grain`,
+    /// which has its own dedicated control.
+    pub intensity: f32,
+    /// -1..1, full scale is ±1.5 stops.
+    pub exposure: f32,
+    /// -1..1 around a mid-gray pivot.
+    pub contrast: f32,
+    /// -1..1; -1 is grayscale.
+    pub saturation: f32,
+    /// -1..1; positive warms, negative cools.
+    pub temperature: f32,
+    /// -1..1; positive shifts magenta, negative green.
+    pub tint: f32,
+    /// 0..1 lifted-blacks film fade.
+    pub fade: f32,
+    /// -1..1 teal-shadows/orange-highlights split toning (negative reverses).
+    pub split_tone: f32,
+    /// 0..1 edge darkening within the layer's own rect.
+    pub vignette: f32,
+    /// 0..1 animated film grain.
+    pub grain: f32,
+}
+
+impl ColorCorrection {
+    pub const PRESET_NONE: &'static str = "none";
+}
+
+impl Default for ColorCorrection {
+    fn default() -> Self {
+        Self {
+            preset: Self::PRESET_NONE.to_string(),
+            intensity: 1.0,
+            exposure: 0.0,
+            contrast: 0.0,
+            saturation: 0.0,
+            temperature: 0.0,
+            tint: 0.0,
+            fade: 0.0,
+            split_tone: 0.0,
+            vignette: 0.0,
+            grain: 0.0,
+        }
+    }
+}
+
+#[derive(Type, Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ColorCorrectionConfiguration {
+    pub screen: ColorCorrection,
+    pub camera: ColorCorrection,
+    /// Whether the screen grade also covers the rendered cursor. On by
+    /// default so the pointer reads as part of the graded footage; off keeps
+    /// it crisp for legibility over vignettes and grain.
+    pub grade_cursor: bool,
+}
+
+impl Default for ColorCorrectionConfiguration {
+    fn default() -> Self {
+        Self {
+            screen: ColorCorrection::default(),
+            camera: ColorCorrection::default(),
+            grade_cursor: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Camera {
@@ -913,6 +989,43 @@ impl MaskSegment {
     }
 }
 
+#[derive(Type, Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum TextAlign {
+    Left,
+    #[default]
+    Center,
+    Right,
+}
+
+#[derive(Type, Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum TextAnimation {
+    None,
+    #[default]
+    Fade,
+    SlideUp,
+    SlideDown,
+    Pop,
+    Typewriter,
+}
+
+/// How a text segment shares the frame with the display recording. The
+/// variants name where the TEXT sits; the display card makes room for it.
+#[derive(Type, Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum TextLayout {
+    /// Text draws over the untouched display (the original behavior).
+    #[default]
+    Overlay,
+    /// The display card shrinks and fades away; text owns the frame.
+    Fullscreen,
+    /// Text in the left half, display card contained in the right half.
+    SplitLeft,
+    /// Text in the right half, display card contained in the left half.
+    SplitRight,
+}
+
 #[derive(Type, Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TextSegment {
@@ -938,8 +1051,36 @@ pub struct TextSegment {
     pub italic: bool,
     #[serde(default = "TextSegment::default_color")]
     pub color: String,
+    /// Legacy symmetric fade. Superseded by the animation fields below; kept
+    /// so configs written by new builds still fade in old builds. The
+    /// `text_anim_version` migration seeds the animation durations from it.
     #[serde(default = "TextSegment::default_fade_duration")]
     pub fade_duration: f64,
+    #[serde(default)]
+    pub align: TextAlign,
+    /// Px at the 1080p reference height, like `font_size`.
+    #[serde(default)]
+    pub letter_spacing: f32,
+    #[serde(default = "TextSegment::default_line_height")]
+    pub line_height: f32,
+    #[serde(default = "TextSegment::default_opacity")]
+    pub opacity: f32,
+    #[serde(default)]
+    pub shadow: f32,
+    #[serde(default)]
+    pub animation_in: TextAnimation,
+    #[serde(default)]
+    pub animation_out: TextAnimation,
+    #[serde(default = "TextSegment::default_fade_duration")]
+    pub animation_in_duration: f64,
+    #[serde(default = "TextSegment::default_fade_duration")]
+    pub animation_out_duration: f64,
+    #[serde(default)]
+    pub layout: TextLayout,
+    /// Seconds the display card takes to morph aside (and back) at the
+    /// segment edges when `layout` is not `Overlay`.
+    #[serde(default = "TextSegment::default_layout_transition")]
+    pub layout_transition: f64,
 }
 
 impl TextSegment {
@@ -977,6 +1118,18 @@ impl TextSegment {
 
     fn default_fade_duration() -> f64 {
         0.15
+    }
+
+    fn default_line_height() -> f32 {
+        1.2
+    }
+
+    fn default_opacity() -> f32 {
+        1.0
+    }
+
+    fn default_layout_transition() -> f64 {
+        0.5
     }
 }
 
@@ -1031,6 +1184,264 @@ pub struct SceneSegment {
     pub transition_in: f64,
     #[serde(default = "default_scene_transition")]
     pub transition_out: f64,
+}
+
+// Shots cut straight into the pose; easing in and out is opt-in.
+fn default_camera3d_transition() -> f64 {
+    0.0
+}
+
+/// A 3D camera pose for the composed content plane. Angles are degrees.
+///
+/// Geometry: the content plane's longest side spans 2 world units, centered at
+/// the origin facing +Z. `tilt_x`/`tilt_y`/`roll` orbit the CAMERA (Euler YXZ,
+/// roll innermost); `rotate_x`/`rotate_y` rotate the CONTENT plane itself.
+/// `zoom` is the camera DISTANCE in world units (larger = further = smaller on
+/// screen); `fov` is the vertical field of view with no size compensation, so
+/// apparent size ∝ 1 / (zoom · tan(fov/2)). `pan_x`/`pan_y` truck the camera in
+/// its own plane (world units; +x moves the subject right, +y up).
+#[derive(Type, Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Camera3DProperties {
+    /// Camera orbit pitch.
+    #[serde(default)]
+    pub tilt_x: f64,
+    /// Camera orbit yaw.
+    #[serde(default)]
+    pub tilt_y: f64,
+    /// Camera roll (innermost camera rotation).
+    #[serde(default)]
+    pub roll: f64,
+    /// Content plane pitch.
+    #[serde(default)]
+    pub rotate_x: f64,
+    /// Content plane yaw.
+    #[serde(default)]
+    pub rotate_y: f64,
+    #[serde(default = "Camera3DProperties::default_fov")]
+    pub fov: f64,
+    /// Camera distance in world units.
+    #[serde(default = "Camera3DProperties::default_zoom")]
+    pub zoom: f64,
+    #[serde(default)]
+    pub pan_x: f64,
+    #[serde(default)]
+    pub pan_y: f64,
+}
+
+impl Camera3DProperties {
+    fn default_fov() -> f64 {
+        45.0
+    }
+
+    fn default_zoom() -> f64 {
+        2.0
+    }
+}
+
+impl Default for Camera3DProperties {
+    fn default() -> Self {
+        Self {
+            tilt_x: 0.0,
+            tilt_y: 0.0,
+            roll: 0.0,
+            rotate_x: 0.0,
+            rotate_y: 0.0,
+            fov: Self::default_fov(),
+            zoom: Self::default_zoom(),
+            pan_x: 0.0,
+            pan_y: 0.0,
+        }
+    }
+}
+
+#[derive(Type, Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum Camera3DBlurMode {
+    #[default]
+    None,
+    Radial,
+    Directional,
+    TiltShift,
+}
+
+/// Screen-space focus blur applied over the composed frame while a 3d segment
+/// is active (a UV-mask variable blur, not a depth-of-field). `strength` is a
+/// blur radius in pixels at 1080p output height; the renderer scales it with
+/// output size so preview and export match.
+#[derive(Type, Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Camera3DBlur {
+    #[serde(default)]
+    pub mode: Camera3DBlurMode,
+    #[serde(default)]
+    pub strength: f64,
+    /// Widens and flattens the sharp-to-blurred transition (0..1).
+    #[serde(default)]
+    pub falloff: f64,
+    /// Focus center in screen UV (radial mode).
+    #[serde(default = "Camera3DBlur::default_focus_x")]
+    pub focus_x: f64,
+    #[serde(default = "Camera3DBlur::default_focus_y")]
+    pub focus_y: f64,
+    /// Sharp region size: radius (radial) or band width (tilt-shift).
+    #[serde(default = "Camera3DBlur::default_focus_size")]
+    pub focus_size: f64,
+    /// Degrees; blur direction (directional) or band angle (tilt-shift).
+    #[serde(default)]
+    pub angle: f64,
+    /// Where the directional blur begins along its axis (0..1).
+    #[serde(default = "Camera3DBlur::default_dir_position")]
+    pub dir_position: f64,
+    /// Swaps the gaussian kernel for a ring-disc bokeh kernel with highlight
+    /// gain. Strength is capped at 20 while enabled.
+    #[serde(default)]
+    pub bokeh: bool,
+}
+
+impl Camera3DBlur {
+    fn default_focus_x() -> f64 {
+        0.37
+    }
+
+    fn default_focus_y() -> f64 {
+        0.5
+    }
+
+    fn default_focus_size() -> f64 {
+        0.5
+    }
+
+    fn default_dir_position() -> f64 {
+        0.5
+    }
+}
+
+impl Default for Camera3DBlur {
+    fn default() -> Self {
+        Self {
+            mode: Camera3DBlurMode::None,
+            strength: 0.0,
+            falloff: 0.0,
+            focus_x: Self::default_focus_x(),
+            focus_y: Self::default_focus_y(),
+            focus_size: Self::default_focus_size(),
+            angle: 0.0,
+            dir_position: Self::default_dir_position(),
+            bokeh: false,
+        }
+    }
+}
+
+/// One scalar keyframe on a per-property track. Interpolation between two
+/// keyframes is a linear value lerp with time remapped by a cubic bezier whose
+/// P1 comes from the left keyframe's `out_easing` and P2 from the right one's
+/// `in_easing` (a split-handle model). Absent handles default to cubic
+/// ease-in-out: P1 [0.65, 0], P2 [0.35, 1].
+#[derive(Type, Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Camera3DKeyframe {
+    /// Seconds relative to the segment start.
+    pub time: f64,
+    pub value: f64,
+    /// Bezier P1 for the track segment leaving this keyframe.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub out_easing: Option<[f64; 2]>,
+    /// Bezier P2 for the track segment entering this keyframe.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub in_easing: Option<[f64; 2]>,
+}
+
+/// Per-property keyframe tracks. A property with an empty track holds the
+/// segment's base value; each track holds independently before its first and
+/// after its last keyframe.
+#[derive(Type, Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Camera3DTracks {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tilt_x: Vec<Camera3DKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tilt_y: Vec<Camera3DKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub roll: Vec<Camera3DKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rotate_x: Vec<Camera3DKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rotate_y: Vec<Camera3DKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fov: Vec<Camera3DKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub zoom: Vec<Camera3DKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pan_x: Vec<Camera3DKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pan_y: Vec<Camera3DKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blur_strength: Vec<Camera3DKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blur_falloff: Vec<Camera3DKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blur_focus_size: Vec<Camera3DKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blur_focus_x: Vec<Camera3DKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blur_focus_y: Vec<Camera3DKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blur_angle: Vec<Camera3DKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blur_dir_position: Vec<Camera3DKeyframe>,
+}
+
+impl Camera3DTracks {
+    /// Every track, for whole-timeline operations like time remapping.
+    pub fn all_tracks_mut(&mut self) -> [&mut Vec<Camera3DKeyframe>; 16] {
+        [
+            &mut self.tilt_x,
+            &mut self.tilt_y,
+            &mut self.roll,
+            &mut self.rotate_x,
+            &mut self.rotate_y,
+            &mut self.fov,
+            &mut self.zoom,
+            &mut self.pan_x,
+            &mut self.pan_y,
+            &mut self.blur_strength,
+            &mut self.blur_falloff,
+            &mut self.blur_focus_size,
+            &mut self.blur_focus_x,
+            &mut self.blur_focus_y,
+            &mut self.blur_angle,
+            &mut self.blur_dir_position,
+        ]
+    }
+}
+
+#[derive(Type, Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Camera3DSegment {
+    pub start: f64,
+    pub end: f64,
+    #[serde(default = "Camera3DSegment::default_enabled")]
+    pub enabled: bool,
+    /// Base pose; per-property tracks override individual values.
+    #[serde(default)]
+    pub properties: Camera3DProperties,
+    #[serde(default)]
+    pub blur: Camera3DBlur,
+    #[serde(default)]
+    pub tracks: Camera3DTracks,
+    /// Seconds to ease from the flat frame into the pose at the segment start.
+    #[serde(default = "default_camera3d_transition")]
+    pub transition_in: f64,
+    /// Seconds to ease back to the flat frame before the segment end.
+    #[serde(default = "default_camera3d_transition")]
+    pub transition_out: f64,
+}
+
+impl Camera3DSegment {
+    fn default_enabled() -> bool {
+        true
+    }
 }
 
 /// A timeline-positioned audio clip (background music or imported audio).
@@ -1126,6 +1537,10 @@ pub struct TimelineConfiguration {
     pub keyboard_segments: Vec<crate::KeyboardTrackSegment>,
     #[serde(default)]
     pub audio_segments: Vec<AudioTrackSegment>,
+    // Explicit rename: the digit boundary makes rename_all's camelCase output
+    // easy to second-guess, and the editor TypeScript hardcodes this name.
+    #[serde(default, rename = "camera3dSegments")]
+    pub camera3d_segments: Vec<Camera3DSegment>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1147,6 +1562,14 @@ pub enum TimelineFrameMapping<'a> {
         kind: ClipTransitionType,
         progress: f64,
         duration: f64,
+        output_end: f64,
+    },
+    /// The recording clock is paused under a fullscreen text segment: the
+    /// frozen `source` frame stands until `output_end` (the hold's end in
+    /// output time). Video shows the frozen frame (hidden behind the takeover
+    /// anyway); audio renders silence.
+    Hold {
+        source: TimelineSource<'a>,
         output_end: f64,
     },
 }
@@ -1213,7 +1636,93 @@ impl TimelineConfiguration {
         })
     }
 
+    /// Output-time windows where a fullscreen text segment pauses the
+    /// recording clock, sorted and merged. Empty for every project without
+    /// fullscreen text — the mapping below then short-circuits to the exact
+    /// pre-hold arithmetic.
+    pub fn hold_windows(&self) -> Vec<(f64, f64)> {
+        let mut windows: Vec<(f64, f64)> = self
+            .text_segments
+            .iter()
+            .filter(|s| s.enabled && s.layout == TextLayout::Fullscreen && s.end > s.start)
+            .map(|s| (s.start, s.end))
+            .collect();
+        if windows.is_empty() {
+            return windows;
+        }
+        windows.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut merged: Vec<(f64, f64)> = Vec::with_capacity(windows.len());
+        for window in windows {
+            match merged.last_mut() {
+                Some(last) if window.0 <= last.1 => last.1 = last.1.max(window.1),
+                _ => merged.push(window),
+            }
+        }
+        merged
+    }
+
+    /// Total output seconds inserted by fullscreen text holds.
+    pub fn held_duration(&self) -> f64 {
+        self.hold_windows().iter().map(|(s, e)| e - s).sum()
+    }
+
     pub fn get_frame_mapping(&self, frame_time: f64) -> Option<TimelineFrameMapping<'_>> {
+        let holds = self.hold_windows();
+        if holds.is_empty() {
+            return self.get_frame_mapping_unheld(frame_time);
+        }
+
+        if let Some((hold_start, hold_end)) = active_hold_window(&holds, frame_time) {
+            let effective = hold_start - held_time_before(&holds, hold_start);
+            let source = match self.get_frame_mapping_unheld(effective)? {
+                TimelineFrameMapping::Single { source, .. }
+                | TimelineFrameMapping::Hold { source, .. } => source,
+                TimelineFrameMapping::Transition { incoming, .. } => incoming,
+            };
+            return Some(TimelineFrameMapping::Hold {
+                source,
+                output_end: hold_end,
+            });
+        }
+
+        let effective = frame_time - held_time_before(&holds, frame_time);
+        let next_hold_start = holds
+            .iter()
+            .map(|(start, _)| *start)
+            .find(|start| *start > frame_time);
+        // The base mapping's output_end is in the un-held (gapless) domain;
+        // put it back into output time and stop at the next hold so consumers
+        // (audio chunking) never render contiguous recording samples across a
+        // pause.
+        let clamp_end = |output_end: f64| {
+            let output_end = effective_to_output(&holds, output_end);
+            next_hold_start.map_or(output_end, |hold| output_end.min(hold))
+        };
+        Some(match self.get_frame_mapping_unheld(effective)? {
+            TimelineFrameMapping::Single { source, output_end } => TimelineFrameMapping::Single {
+                source,
+                output_end: clamp_end(output_end),
+            },
+            TimelineFrameMapping::Transition {
+                outgoing,
+                incoming,
+                kind,
+                progress,
+                duration,
+                output_end,
+            } => TimelineFrameMapping::Transition {
+                outgoing,
+                incoming,
+                kind,
+                progress,
+                duration,
+                output_end: clamp_end(output_end),
+            },
+            hold @ TimelineFrameMapping::Hold { .. } => hold,
+        })
+    }
+
+    fn get_frame_mapping_unheld(&self, frame_time: f64) -> Option<TimelineFrameMapping<'_>> {
         if self.transitions.is_empty() {
             return self.get_segment_time_without_transitions(frame_time).map(
                 |(source_time, segment, segment_index, output_end)| TimelineFrameMapping::Single {
@@ -1286,19 +1795,15 @@ impl TimelineConfiguration {
     }
 
     pub fn get_segment_time(&self, frame_time: f64) -> Option<(f64, &TimelineSegment)> {
-        if !self.transitions.is_empty() {
-            return match self.get_frame_mapping(frame_time)? {
-                TimelineFrameMapping::Single { source, .. } => {
-                    Some((source.source_time, source.segment))
-                }
-                TimelineFrameMapping::Transition { incoming, .. } => {
-                    Some((incoming.source_time, incoming.segment))
-                }
-            };
+        match self.get_frame_mapping(frame_time)? {
+            TimelineFrameMapping::Single { source, .. }
+            | TimelineFrameMapping::Hold { source, .. } => {
+                Some((source.source_time, source.segment))
+            }
+            TimelineFrameMapping::Transition { incoming, .. } => {
+                Some((incoming.source_time, incoming.segment))
+            }
         }
-
-        self.get_segment_time_without_transitions(frame_time)
-            .map(|(source_time, segment, _, _)| (source_time, segment))
     }
 
     fn get_segment_time_without_transitions(
@@ -1328,17 +1833,47 @@ impl TimelineConfiguration {
     }
 
     pub fn duration(&self) -> f64 {
-        let segment_duration = self.segments.iter().map(TimelineSegment::duration).sum();
-        if self.transitions.is_empty() {
-            return segment_duration;
-        }
+        let segment_duration: f64 = self.segments.iter().map(TimelineSegment::duration).sum();
+        let segment_duration = if self.transitions.is_empty() {
+            segment_duration
+        } else {
+            segment_duration
+                - (1..self.segments.len())
+                    .filter_map(|segment_index| self.effective_transition(segment_index))
+                    .map(|transition| transition.duration)
+                    .sum::<f64>()
+        };
 
-        segment_duration
-            - (1..self.segments.len())
-                .filter_map(|segment_index| self.effective_transition(segment_index))
-                .map(|transition| transition.duration)
-                .sum::<f64>()
+        segment_duration + self.held_duration()
     }
+}
+
+fn active_hold_window(windows: &[(f64, f64)], time: f64) -> Option<(f64, f64)> {
+    windows
+        .iter()
+        .find(|(start, end)| time >= *start && time < *end)
+        .copied()
+}
+
+fn held_time_before(windows: &[(f64, f64)], time: f64) -> f64 {
+    windows
+        .iter()
+        .map(|(start, end)| (time.min(*end) - start).max(0.0))
+        .sum()
+}
+
+/// Inverse of the held-output -> gapless transform: places a gapless
+/// timestamp back into output time, landing after every hold it passed.
+fn effective_to_output(windows: &[(f64, f64)], effective: f64) -> f64 {
+    let mut output = effective;
+    for (start, end) in windows {
+        if output >= *start {
+            output += end - start;
+        } else {
+            break;
+        }
+    }
+    output
 }
 
 pub const WALLPAPERS_PATH: &str = "assets/backgrounds/macOS";
@@ -1704,6 +2239,11 @@ pub struct ProjectConfiguration {
     pub screen_motion_blur: f32,
     #[serde(default)]
     pub screen_movement_spring: ScreenMovementSpring,
+    /// Per-layer cinematic color grades. Field-level default keeps old
+    /// project files (and old saved presets) deserializing to the identity
+    /// grade.
+    #[serde(default)]
+    pub color_correction: ColorCorrectionConfiguration,
     /// How text segment font sizes are interpreted. 0 (legacy): the renderer
     /// multiplied `font_size` by `size.y / 0.2`, coupling glyph size to the
     /// box. 1: `font_size` alone determines glyph size (1080p-relative);
@@ -1712,9 +2252,16 @@ pub struct ProjectConfiguration {
     /// `Default::default()` produces the current version.
     #[serde(default)]
     pub text_size_version: u32,
+    /// 0 (legacy): text segments animate with the single symmetric
+    /// `fade_duration`. 1: the enter/exit animation fields drive timing;
+    /// legacy configs are migrated on load by seeding both animation
+    /// durations from `fade_duration`.
+    #[serde(default)]
+    pub text_anim_version: u32,
 }
 
 pub const TEXT_SIZE_VERSION: u32 = 1;
+pub const TEXT_ANIM_VERSION: u32 = 1;
 
 fn camera_config_needs_migration(value: &Value) -> bool {
     value
@@ -1744,7 +2291,9 @@ impl Default for ProjectConfiguration {
             hidden_text_segments: Default::default(),
             screen_motion_blur: Self::default_screen_motion_blur(),
             screen_movement_spring: Default::default(),
+            color_correction: Default::default(),
             text_size_version: TEXT_SIZE_VERSION,
+            text_anim_version: TEXT_ANIM_VERSION,
         }
     }
 }
@@ -1811,6 +2360,21 @@ impl ProjectConfiguration {
                 }
             }
             config.text_size_version = TEXT_SIZE_VERSION;
+        }
+
+        if config.text_anim_version == 0 {
+            if let Some(timeline) = config.timeline.as_mut() {
+                for segment in &mut timeline.text_segments {
+                    let fade = segment.fade_duration.max(0.0);
+                    segment.animation_in_duration = fade;
+                    segment.animation_out_duration = fade;
+                    if fade == 0.0 {
+                        segment.animation_in = TextAnimation::None;
+                        segment.animation_out = TextAnimation::None;
+                    }
+                }
+            }
+            config.text_anim_version = TEXT_ANIM_VERSION;
         }
 
         config
@@ -1995,7 +2559,113 @@ mod tests {
             caption_segments: Vec::new(),
             keyboard_segments: Vec::new(),
             audio_segments: Vec::new(),
+            camera3d_segments: Vec::new(),
         }
+    }
+
+    fn fullscreen_text(start: f64, end: f64) -> TextSegment {
+        TextSegment {
+            start,
+            end,
+            track: 0,
+            enabled: true,
+            content: "Title".to_string(),
+            center: XY::new(0.5, 0.5),
+            size: XY::new(0.35, 0.2),
+            font_family: "sans-serif".to_string(),
+            font_size: 48.0,
+            font_weight: 700.0,
+            italic: false,
+            color: "#ffffff".to_string(),
+            fade_duration: 0.15,
+            align: TextAlign::Center,
+            letter_spacing: 0.0,
+            line_height: 1.2,
+            opacity: 1.0,
+            shadow: 0.0,
+            animation_in: TextAnimation::Fade,
+            animation_out: TextAnimation::Fade,
+            animation_in_duration: 0.15,
+            animation_out_duration: 0.15,
+            layout: TextLayout::Fullscreen,
+            layout_transition: 0.5,
+        }
+    }
+
+    #[test]
+    fn fullscreen_text_inserts_output_time() {
+        let mut timeline = timeline_with_transitions(Vec::new());
+        timeline.text_segments = vec![fullscreen_text(2.0, 5.0)];
+
+        assert_eq!(timeline.duration(), 13.0);
+
+        // Before the hold: unchanged mapping, but the chunk ends at the hold.
+        assert!(matches!(
+            timeline.get_frame_mapping(1.0),
+            Some(TimelineFrameMapping::Single { source, output_end })
+                if source.source_time == 1.0 && output_end == 2.0
+        ));
+
+        // Inside the hold: frozen at the recording instant where it started.
+        assert!(matches!(
+            timeline.get_frame_mapping(3.5),
+            Some(TimelineFrameMapping::Hold { source, output_end })
+                if source.source_time == 2.0 && output_end == 5.0
+        ));
+        let (frozen, _) = timeline.get_segment_time(3.5).unwrap();
+        assert_eq!(frozen, 2.0);
+
+        // After the hold: resumes exactly where it paused.
+        let (resumed, _) = timeline.get_segment_time(5.0).unwrap();
+        assert_eq!(resumed, 2.0);
+        let (later, segment) = timeline.get_segment_time(7.5).unwrap();
+        assert_eq!(later, 10.5);
+        assert_eq!(segment.recording_clip, 1);
+    }
+
+    #[test]
+    fn overlay_and_disabled_texts_do_not_hold() {
+        let mut timeline = timeline_with_transitions(Vec::new());
+        let mut overlay = fullscreen_text(2.0, 5.0);
+        overlay.layout = TextLayout::Overlay;
+        let mut disabled = fullscreen_text(6.0, 8.0);
+        disabled.enabled = false;
+        timeline.text_segments = vec![overlay, disabled];
+
+        assert_eq!(timeline.duration(), 10.0);
+        assert!(timeline.hold_windows().is_empty());
+        let (time, _) = timeline.get_segment_time(4.5).unwrap();
+        assert_eq!(time, 10.5);
+    }
+
+    #[test]
+    fn overlapping_fullscreen_texts_merge_into_one_hold() {
+        let mut timeline = timeline_with_transitions(Vec::new());
+        timeline.text_segments = vec![fullscreen_text(2.0, 5.0), fullscreen_text(4.0, 6.0)];
+
+        assert_eq!(timeline.hold_windows(), vec![(2.0, 6.0)]);
+        assert_eq!(timeline.duration(), 14.0);
+        let (frozen, _) = timeline.get_segment_time(5.5).unwrap();
+        assert_eq!(frozen, 2.0);
+        let (after, _) = timeline.get_segment_time(6.5).unwrap();
+        assert_eq!(after, 2.5);
+    }
+
+    #[test]
+    fn holds_compose_with_transitions() {
+        let mut timeline = timeline_with_transitions(vec![ClipTransition {
+            segment_index: 1,
+            kind: ClipTransitionType::CrossFade,
+            duration: 1.0,
+        }]);
+        timeline.text_segments = vec![fullscreen_text(1.0, 2.0)];
+
+        assert_eq!(timeline.duration(), 10.0);
+        // 6.0 output = 5.0 effective = 2.0s into the second clip (whose
+        // output start is 3.0 after the 1s cross-fade overlap).
+        let (time, segment) = timeline.get_segment_time(6.0).unwrap();
+        assert_eq!(segment.recording_clip, 1);
+        assert_eq!(time, 12.0);
     }
 
     #[test]
@@ -2102,6 +2772,100 @@ mod tests {
 
         assert!(timeline.transitions.is_empty());
         assert_eq!(timeline.duration(), 4.0);
+    }
+
+    /// The editor TypeScript hardcodes these field names; the serialized
+    /// form is a compatibility contract, not an implementation detail.
+    #[test]
+    fn camera3d_segments_serialize_with_stable_field_names() {
+        let mut timeline = timeline_with_transitions(Vec::new());
+        timeline.camera3d_segments = vec![Camera3DSegment {
+            start: 1.0,
+            end: 3.0,
+            enabled: true,
+            properties: Camera3DProperties {
+                tilt_x: -28.0,
+                tilt_y: 26.0,
+                roll: 5.0,
+                zoom: 1.59,
+                pan_x: 0.37,
+                pan_y: -0.15,
+                ..Default::default()
+            },
+            blur: Camera3DBlur {
+                mode: Camera3DBlurMode::Radial,
+                strength: 19.0,
+                falloff: 0.62,
+                bokeh: true,
+                ..Default::default()
+            },
+            tracks: Camera3DTracks {
+                zoom: vec![
+                    Camera3DKeyframe {
+                        time: 0.0,
+                        value: 0.715,
+                        out_easing: Some([0.0, 0.0]),
+                        in_easing: None,
+                    },
+                    Camera3DKeyframe {
+                        time: 2.0,
+                        value: 2.1,
+                        out_easing: None,
+                        in_easing: Some([1.0, 1.0]),
+                    },
+                ],
+                ..Default::default()
+            },
+            transition_in: 0.3,
+            transition_out: 0.3,
+        }];
+
+        let json = serde_json::to_value(&timeline).unwrap();
+        let segment = &json["camera3dSegments"][0];
+        assert_eq!(segment["start"], 1.0);
+        assert_eq!(segment["properties"]["tiltX"], -28.0);
+        assert_eq!(segment["properties"]["tiltY"], 26.0);
+        assert_eq!(segment["properties"]["panX"], 0.37);
+        assert_eq!(segment["properties"]["fov"], 45.0);
+        assert_eq!(segment["properties"]["rotateX"], 0.0);
+        assert_eq!(segment["blur"]["mode"], "radial");
+        assert_eq!(segment["blur"]["strength"], 19.0);
+        assert_eq!(segment["blur"]["focusX"], 0.37);
+        assert_eq!(segment["blur"]["dirPosition"], 0.5);
+        assert_eq!(segment["blur"]["bokeh"], true);
+        assert_eq!(segment["tracks"]["zoom"][0]["time"], 0.0);
+        assert_eq!(segment["tracks"]["zoom"][0]["value"], 0.715);
+        assert_eq!(segment["tracks"]["zoom"][0]["outEasing"][1], 0.0);
+        assert!(segment["tracks"]["zoom"][0].get("inEasing").is_none());
+        assert!(segment["tracks"].get("tiltX").is_none());
+        assert_eq!(segment["transitionIn"], 0.3);
+        assert_eq!(
+            serde_json::to_value(Camera3DBlurMode::TiltShift).unwrap(),
+            serde_json::json!("tiltShift")
+        );
+
+        // Old configs without the field still load, and the loaded form
+        // round-trips.
+        let legacy: TimelineConfiguration = serde_json::from_value(serde_json::json!({
+            "segments": [
+                { "recordingSegment": 0, "timescale": 1.0, "start": 0.0, "end": 4.0 }
+            ],
+            "zoomSegments": []
+        }))
+        .unwrap();
+        assert!(legacy.camera3d_segments.is_empty());
+
+        let reloaded: TimelineConfiguration = serde_json::from_value(json).unwrap();
+        assert_eq!(reloaded.camera3d_segments.len(), 1);
+        assert_eq!(reloaded.camera3d_segments[0].tracks.zoom.len(), 2);
+        assert_eq!(
+            reloaded.camera3d_segments[0].tracks.zoom[0].out_easing,
+            Some([0.0, 0.0])
+        );
+        assert_eq!(
+            reloaded.camera3d_segments[0].blur.mode,
+            Camera3DBlurMode::Radial
+        );
     }
 
     #[test]
@@ -2293,10 +3057,22 @@ mod tests {
                     italic: false,
                     color: "#ffffff".to_string(),
                     fade_duration: 0.15,
+                    align: TextAlign::Center,
+                    letter_spacing: 0.0,
+                    line_height: 1.2,
+                    opacity: 1.0,
+                    shadow: 0.0,
+                    animation_in: TextAnimation::Fade,
+                    animation_out: TextAnimation::Fade,
+                    animation_in_duration: 0.15,
+                    animation_out_duration: 0.15,
+                    layout: TextLayout::Overlay,
+                    layout_transition: 0.5,
                 }],
                 caption_segments: Vec::new(),
                 keyboard_segments: Vec::new(),
                 audio_segments: Vec::new(),
+                camera3d_segments: Vec::new(),
             }),
             ..Default::default()
         };
@@ -2357,6 +3133,110 @@ mod tests {
 
         let segment = &config.timeline.as_ref().unwrap().text_segments[0];
         assert_eq!(segment.font_size, 96.0);
+    }
+
+    fn write_config_with_text_fade(project_path: &std::path::Path, fade_duration: f64) {
+        let mut config = ProjectConfiguration {
+            timeline: Some(TimelineConfiguration {
+                segments: Vec::new(),
+                transitions: Vec::new(),
+                zoom_segments: Vec::new(),
+                scene_segments: Vec::new(),
+                mask_segments: Vec::new(),
+                text_segments: vec![TextSegment {
+                    start: 0.0,
+                    end: 1.0,
+                    track: 0,
+                    enabled: true,
+                    content: "Text".to_string(),
+                    center: XY::new(0.5, 0.5),
+                    size: XY::new(0.35, 0.2),
+                    font_family: "sans-serif".to_string(),
+                    font_size: 48.0,
+                    font_weight: 700.0,
+                    italic: false,
+                    color: "#ffffff".to_string(),
+                    fade_duration,
+                    align: TextAlign::Center,
+                    letter_spacing: 0.0,
+                    line_height: 1.2,
+                    opacity: 1.0,
+                    shadow: 0.0,
+                    animation_in: TextAnimation::Fade,
+                    animation_out: TextAnimation::Fade,
+                    animation_in_duration: 0.15,
+                    animation_out_duration: 0.15,
+                    layout: TextLayout::Overlay,
+                    layout_transition: 0.5,
+                }],
+                caption_segments: Vec::new(),
+                keyboard_segments: Vec::new(),
+                audio_segments: Vec::new(),
+                camera3d_segments: Vec::new(),
+            }),
+            ..Default::default()
+        };
+        config.text_anim_version = 0;
+
+        let mut value = serde_json::to_value(&config).unwrap();
+        let object = value.as_object_mut().unwrap();
+        object.remove("textAnimVersion");
+        // A legacy file predates the animation fields entirely.
+        if let Some(segments) = value
+            .pointer_mut("/timeline/textSegments")
+            .and_then(Value::as_array_mut)
+        {
+            for segment in segments {
+                let object = segment.as_object_mut().unwrap();
+                for key in [
+                    "align",
+                    "letterSpacing",
+                    "lineHeight",
+                    "opacity",
+                    "shadow",
+                    "animationIn",
+                    "animationOut",
+                    "animationInDuration",
+                    "animationOutDuration",
+                ] {
+                    object.remove(key);
+                }
+            }
+        }
+        std::fs::write(
+            project_path.join("project-config.json"),
+            serde_json::to_string(&value).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn legacy_text_fade_seeds_animation_durations() {
+        let dir = tempfile::tempdir().unwrap();
+        write_config_with_text_fade(dir.path(), 0.5);
+
+        let config = ProjectConfiguration::load(dir.path()).unwrap();
+
+        let segment = &config.timeline.as_ref().unwrap().text_segments[0];
+        assert_eq!(segment.animation_in, TextAnimation::Fade);
+        assert_eq!(segment.animation_out, TextAnimation::Fade);
+        assert_eq!(segment.animation_in_duration, 0.5);
+        assert_eq!(segment.animation_out_duration, 0.5);
+        assert_eq!(config.text_anim_version, TEXT_ANIM_VERSION);
+    }
+
+    #[test]
+    fn legacy_text_zero_fade_disables_animation() {
+        let dir = tempfile::tempdir().unwrap();
+        write_config_with_text_fade(dir.path(), 0.0);
+
+        let config = ProjectConfiguration::load(dir.path()).unwrap();
+
+        let segment = &config.timeline.as_ref().unwrap().text_segments[0];
+        assert_eq!(segment.animation_in, TextAnimation::None);
+        assert_eq!(segment.animation_out, TextAnimation::None);
+        assert_eq!(segment.animation_in_duration, 0.0);
+        assert_eq!(segment.animation_out_duration, 0.0);
     }
 
     #[test]

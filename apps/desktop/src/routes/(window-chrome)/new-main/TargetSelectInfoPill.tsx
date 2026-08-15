@@ -6,6 +6,7 @@ import type { InfoPillVariant } from "./InfoPill";
 export default function TargetSelectInfoPill<T>(props: {
 	value: T | null;
 	permissionGranted: boolean;
+	disconnected?: boolean;
 	requestPermission: () => void;
 	onClick: (e: MouseEvent) => void;
 	PillComponent: Component<
@@ -15,6 +16,7 @@ export default function TargetSelectInfoPill<T>(props: {
 	const { t } = useI18n();
 	const variant = (): InfoPillVariant => {
 		if (!props.permissionGranted) return "red";
+		if (props.disconnected) return "gray";
 		return props.value !== null ? "blue" : "gray";
 	};
 
@@ -39,9 +41,11 @@ export default function TargetSelectInfoPill<T>(props: {
 		>
 			{!props.permissionGranted
 				? t("recording.allow")
-				: props.value !== null
-					? t("recording.on")
-					: t("recording.off")}
+				: props.disconnected
+					? t("recording.notConnected")
+					: props.value !== null
+						? t("recording.on")
+						: t("recording.off")}
 		</Dynamic>
 	);
 }

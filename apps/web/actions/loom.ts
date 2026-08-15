@@ -100,14 +100,17 @@ const LOOM_CSV_PERMISSION_ERROR =
 async function createLoomImportRateLimitCheck(userId: User.UserId) {
 	if (NODE_ENV !== "production") return async () => false;
 
-	const headersList = await headers();
-	const request = new Request("https://cap.so/api/loom-import-rate-limit", {
-		method: "POST",
-		headers: headersList,
-	});
-
 	return async () => {
 		try {
+			// Built inside the try: a header value that fails the Fetch spec's
+			// Headers validation (raw HTTP allows byte values that WHATWG
+			// Headers.set rejects) throws here, before checkRateLimit ever runs.
+			const headersList = await headers();
+			const request = new Request("https://cap.so/api/loom-import-rate-limit", {
+				method: "POST",
+				headers: headersList,
+			});
+
 			const { rateLimited } = await checkRateLimit(LOOM_IMPORT_RATE_LIMIT_ID, {
 				request,
 				rateLimitKey: `loom-import:${userId}`,
@@ -402,9 +405,26 @@ async function importLoomVideoForOwner({
 		fetchLoomOEmbed(loomVideoId),
 	]);
 
-	const writable = await Storage.getWritableAccessForUser(ownerId, orgId).pipe(
-		runPromise,
-	);
+	const writableResult = await Storage.getWritableAccessForUser(ownerId, orgId)
+		.pipe(runPromise)
+		.then(
+			(value) => ({ ok: true as const, value }),
+			(error) => ({ ok: false as const, error }),
+		);
+
+	if (!writableResult.ok) {
+		console.error(
+			`Loom import: failed to resolve storage access for user ${ownerId} in org ${orgId}:`,
+			writableResult.error,
+		);
+		return {
+			success: false,
+			error:
+				"Could not prepare storage for this import. Please try again or contact support.",
+		};
+	}
+
+	const writable = writableResult.value;
 
 	const videoId = Video.VideoId.make(nanoId());
 	const name =

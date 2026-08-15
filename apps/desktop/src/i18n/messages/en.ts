@@ -175,6 +175,9 @@ export const enMessages = {
 	"settings.autoZoomOnClicks": "Auto zoom on clicks",
 	"settings.autoZoomOnClicksDescription":
 		"Automatically add zoom segments around mouse clicks in Studio recordings.",
+	"settings.defaultZoomAmount": "Default zoom amount",
+	"settings.defaultZoomAmountDescription":
+		"Zoom level for newly created and auto-generated zoom segments.",
 	"settings.captureKeyboardPresses": "Capture keyboard presses",
 	"settings.captureKeyboardPressesDescription":
 		"Record key presses so you can add keyboard overlays in the editor.",
@@ -266,6 +269,7 @@ export const enMessages = {
 	"recording.noSystemAudio": "No System Audio",
 	"recording.noMatchingCameras": "No matching cameras",
 	"recording.noMatchingMicrophones": "No matching microphones",
+	"recording.notConnected": "Not connected",
 	"recording.searchCameras": "Search cameras",
 	"recording.searchMicrophones": "Search microphones",
 	"recording.noWebcam": "No Webcam",

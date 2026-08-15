@@ -1113,6 +1113,27 @@ async fn set_mic_input(state: MutableState<'_, App>, label: Option<String>) -> R
         let mut app = state.write().await;
         app.ensure_mic_feed_alive().await?;
 
+        // A selected microphone that isn't connected is an expected state
+        // (e.g. undocked laptop), not an error: remember the selection so the
+        // device can be reclaimed when it reappears, and leave the feed empty.
+        if let Some(label) = desired_label.as_ref()
+            && !matches!(app.recording_state, RecordingState::Active(_))
+            && find_mic_by_label_or_fuzzy(&MicrophoneFeed::list_names(), label).is_none()
+        {
+            info!(
+                "Selected microphone '{label}' is not connected; keeping selection with no input"
+            );
+            app.selected_mic_label = desired_label.clone();
+            let mic_feed = app.mic_feed.clone();
+            drop(app);
+            // Best-effort: the feed may be locked by a recording that is still
+            // spinning up (Pending), in which case it must keep its input.
+            if let Err(err) = mic_feed.ask(microphone::RemoveInput).await {
+                warn!("Failed to release microphone input for absent device: {err}");
+            }
+            return Ok(());
+        }
+
         if desired_label == app.selected_mic_label {
             if desired_label.is_some() && !matches!(app.recording_state, RecordingState::Active(_))
             {
@@ -1283,6 +1304,45 @@ async fn set_camera_input(
             .set_camera_feed(None)
             .await
             .map_err(|e| e.to_string())?;
+    }
+
+    // A selected camera that isn't connected is an expected state (e.g. undocked
+    // laptop), not an error: tear down like a deselect but remember the selection
+    // so the device can be reclaimed when it reappears. Running the init/retry
+    // loop instead would flash the preview window and toast an error on every
+    // launch and picker-open while the device is away.
+    if let Some(id) = &id
+        && !is_camera_available(id)
+    {
+        info!(camera = ?id, "Selected camera is not connected; keeping selection with no input");
+        let shutdown_rx = {
+            let app = &mut *state.write().await;
+            app.camera_in_use = false;
+            app.selected_camera_id = Some(id.clone());
+            app.camera_cleanup_done = true;
+            if skip_camera_window {
+                app.camera_preview.begin_shutdown()
+            } else {
+                app.camera_preview.pause();
+                None
+            }
+        };
+
+        // Best-effort: the feed may be locked by a recording that is still
+        // spinning up (Pending), in which case it must keep its input.
+        if let Err(err) = camera_feed.ask(feeds::camera::RemoveInput).await {
+            warn!("Failed to release camera input for absent device: {err}");
+        }
+
+        if let Some(rx) = shutdown_rx {
+            let _ = tokio::time::timeout(Duration::from_millis(500), rx).await;
+        }
+
+        if !skip_camera_window && let Some(window) = CapWindowId::Camera.get(&app_handle) {
+            let _ = window.hide();
+        }
+
+        return Ok(());
     }
 
     match &id {
@@ -2164,7 +2224,10 @@ pub async fn request_app_exit(app: AppHandle) {
     finalize_app_exit(&app, 0);
 }
 
-fn find_mic_by_label_or_fuzzy(devices: &[String], selected_label: &str) -> Option<String> {
+pub(crate) fn find_mic_by_label_or_fuzzy(
+    devices: &[String],
+    selected_label: &str,
+) -> Option<String> {
     if devices.iter().any(|name| name == selected_label) {
         return Some(selected_label.to_string());
     }
@@ -2315,7 +2378,7 @@ fn spawn_camera_watcher(app_handle: AppHandle) {
     });
 }
 
-fn is_camera_available(id: &DeviceOrModelID) -> bool {
+pub(crate) fn is_camera_available(id: &DeviceOrModelID) -> bool {
     let cameras: Vec<_> = cap_camera::list_cameras().collect();
     debug!(
         "is_camera_available: looking for {:?} in {} cameras",
@@ -3319,14 +3382,22 @@ async fn update_project_config_in_memory(
 
 #[tauri::command]
 #[specta::specta]
-#[instrument(skip(editor_instance))]
+#[instrument(skip(app, editor_instance))]
 async fn generate_zoom_segments_from_clicks(
+    app: AppHandle,
     editor_instance: WindowEditorInstance,
 ) -> Result<Vec<ZoomSegment>, String> {
     let meta = editor_instance.meta();
     let recordings = &editor_instance.recordings;
 
-    let zoom_segments = recording::generate_zoom_segments_for_project(meta, recordings);
+    let zoom_amount = GeneralSettingsStore::get(&app)
+        .ok()
+        .flatten()
+        .and_then(|settings| settings.default_zoom_amount)
+        .unwrap_or(recording::DEFAULT_AUTO_ZOOM_AMOUNT);
+
+    let zoom_segments =
+        recording::generate_zoom_segments_for_project(meta, recordings, zoom_amount);
 
     Ok(zoom_segments)
 }
@@ -3388,6 +3459,15 @@ async fn list_audio_devices() -> Result<Vec<String>, ()> {
     }
 
     Ok(MicrophoneFeed::list_names())
+}
+
+#[tauri::command]
+#[specta::specta]
+#[instrument]
+async fn list_system_fonts() -> Vec<String> {
+    tokio::task::spawn_blocking(cap_rendering::system_font_families)
+        .await
+        .unwrap_or_default()
 }
 
 #[derive(Serialize, Type, Debug, Clone)]
@@ -4797,45 +4877,8 @@ fn configure_camera_blur_recovery(
     }
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub async fn run(recording_logging_handle: LoggingHandle, logs_dir: PathBuf) {
-    // Arm the unexpected-termination sentinel before anything else can crash, and
-    // report any previous session that died without a clean shutdown.
-    let previous_termination = crash_sentinel::init(&logs_dir, env!("CARGO_PKG_VERSION"));
-    configure_windows_graphics_recovery(previous_termination);
-
-    // Keep the sentinel's blur marker in sync with live BlurProcessor instances
-    // (camera preview and editor render alike), so a native blur crash is
-    // attributable on the next launch.
-    cap_camera_effects::set_blur_session_observer(|active| {
-        if active {
-            crash_sentinel::enter_blur_session();
-        } else {
-            crash_sentinel::exit_blur_session();
-        }
-    });
-
-    ffmpeg::init()
-        .map_err(|e| {
-            error!("Failed to initialize ffmpeg: {e}");
-        })
-        .ok();
-
-    // Detect the camera-preview quality profile once from total RAM. On low-RAM
-    // machines (<= 8GB) this opts the preview into a cheaper profile (smaller
-    // textures, 30fps, no background blur); higher-spec machines keep the exact
-    // current behaviour. Only the preview is affected — recording is untouched.
-    {
-        let mut system = sysinfo::System::new();
-        system.refresh_memory();
-        camera::init_preview_profile(system.total_memory());
-    }
-
-    telemetry::init();
-
-    let tauri_context = tauri::generate_context!();
-
-    let specta_builder = tauri_specta::Builder::new()
+fn specta_builder() -> tauri_specta::Builder {
+    tauri_specta::Builder::new()
         .commands(tauri_specta::collect_commands![
             set_mic_input,
             set_camera_input,
@@ -4866,6 +4909,7 @@ pub async fn run(recording_logging_handle: LoggingHandle, logs_dir: PathBuf) {
             windows::refresh_window_content_protection,
             general_settings::get_default_excluded_windows,
             list_audio_devices,
+            list_system_fonts,
             close_recordings_overlay_window,
             fake_window::set_fake_window_bounds,
             fake_window::remove_fake_window,
@@ -5051,7 +5095,48 @@ pub async fn run(recording_logging_handle: LoggingHandle, logs_dir: PathBuf) {
         .typ::<cap_automation::ClipboardSource>()
         .typ::<cap_automation::ExportFormat>()
         .typ::<cap_automation::AutomationExportCompression>()
-        .typ::<cap_automation::ExportDestination>();
+        .typ::<cap_automation::ExportDestination>()
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub async fn run(recording_logging_handle: LoggingHandle, logs_dir: PathBuf) {
+    // Arm the unexpected-termination sentinel before anything else can crash, and
+    // report any previous session that died without a clean shutdown.
+    let previous_termination = crash_sentinel::init(&logs_dir, env!("CARGO_PKG_VERSION"));
+    configure_windows_graphics_recovery(previous_termination);
+
+    // Keep the sentinel's blur marker in sync with live BlurProcessor instances
+    // (camera preview and editor render alike), so a native blur crash is
+    // attributable on the next launch.
+    cap_camera_effects::set_blur_session_observer(|active| {
+        if active {
+            crash_sentinel::enter_blur_session();
+        } else {
+            crash_sentinel::exit_blur_session();
+        }
+    });
+
+    ffmpeg::init()
+        .map_err(|e| {
+            error!("Failed to initialize ffmpeg: {e}");
+        })
+        .ok();
+
+    // Detect the camera-preview quality profile once from total RAM. On low-RAM
+    // machines (<= 8GB) this opts the preview into a cheaper profile (smaller
+    // textures, 30fps, no background blur); higher-spec machines keep the exact
+    // current behaviour. Only the preview is affected — recording is untouched.
+    {
+        let mut system = sysinfo::System::new();
+        system.refresh_memory();
+        camera::init_preview_profile(system.total_memory());
+    }
+
+    telemetry::init();
+
+    let tauri_context = tauri::generate_context!();
+
+    let specta_builder = specta_builder();
 
     #[cfg(debug_assertions)]
     {
@@ -6839,5 +6924,18 @@ mod screenshot_share_cache_tests {
         let link = screenshot_share_link_for_hash(Some(&sharing(None)), "hash-a");
 
         assert!(link.is_none());
+    }
+}
+
+#[cfg(test)]
+mod typescript_bindings_tests {
+    #[test]
+    fn export_typescript_bindings() {
+        let bindings_path = std::path::Path::new("../src/utils/tauri.ts");
+        if bindings_path.parent().is_some_and(|parent| parent.exists()) {
+            super::specta_builder()
+                .export(specta_typescript::Typescript::default(), bindings_path)
+                .expect("failed to export TypeScript bindings");
+        }
     }
 }

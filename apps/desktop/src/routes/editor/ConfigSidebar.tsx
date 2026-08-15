@@ -1,3 +1,4 @@
+import { Button } from "@cap/ui-solid";
 import { NumberField } from "@kobalte/core";
 import {
 	Collapsible,
@@ -31,9 +32,11 @@ import {
 	createSignal,
 	For,
 	Index,
+	type JSX,
 	lazy,
 	on,
 	onMount,
+	type ParentProps,
 	Show,
 	Suspense,
 	type ValidComponent,
@@ -48,6 +51,7 @@ import transparentBg from "~/assets/illustrations/transparent.webp";
 import { Toggle } from "~/components/Toggle";
 import { useI18n } from "~/i18n";
 import { generalSettingsStore } from "~/store";
+import { listSystemFonts } from "~/utils/fonts";
 import { normalizeOpaqueHexColor } from "~/utils/hex-color";
 import {
 	createSelectedOrganization,
@@ -62,7 +66,6 @@ import {
 	type CameraYPosition,
 	type CaptionTrackSegment,
 	type ClipOffsets,
-	type ClipSpeedAudioMode,
 	type CursorAnimationStyle,
 	type CursorType,
 	commands,
@@ -76,15 +79,23 @@ import {
 	type XY,
 	type ZoomSegment,
 } from "~/utils/tauri";
+import IconLucideAlignCenter from "~icons/lucide/align-center";
+import IconLucideAlignLeft from "~icons/lucide/align-left";
+import IconLucideAlignRight from "~icons/lucide/align-right";
+import IconLucideArrowLeftRight from "~icons/lucide/arrow-left-right";
 import IconLucideBoxSelect from "~icons/lucide/box-select";
 import IconLucideColumns2 from "~icons/lucide/columns-2";
 import IconLucideEyeOff from "~icons/lucide/eye-off";
+import IconLucideFlipHorizontal2 from "~icons/lucide/flip-horizontal-2";
+import IconLucideFlipVertical2 from "~icons/lucide/flip-vertical-2";
 import IconLucideGrid from "~icons/lucide/grid";
 import IconLucideImageOff from "~icons/lucide/image-off";
+import IconLucideItalic from "~icons/lucide/italic";
 import IconLucideKeyboard from "~icons/lucide/keyboard";
 import IconLucideLaptop from "~icons/lucide/laptop";
 import IconLucideMonitor from "~icons/lucide/monitor";
 import IconLucideMoon from "~icons/lucide/moon";
+import IconLucideMoveRight from "~icons/lucide/move-right";
 import IconLucideMusic from "~icons/lucide/music";
 import IconLucidePalette from "~icons/lucide/palette";
 import IconLucideRabbit from "~icons/lucide/rabbit";
@@ -102,9 +113,12 @@ import {
 	MIN_VOLUME_DB,
 } from "./audio";
 import { BrandColorsDropdown } from "./BrandColorsDropdown";
+import { ColorCorrectionSection } from "./ColorCorrectionSection";
 import { syncCaptionWordsWithText } from "./captions";
+import { type ClipTransition, clipSourceTimeAt } from "./clip-transitions";
 import { getColorPreviewBorderColor, hexToRgb, RgbInput } from "./color-utils";
 import { type CornerRoundingType, useEditorContext } from "./context";
+import { FontPicker } from "./FontPicker";
 import { GradientEditor } from "./GradientEditor";
 import { KeyboardTab } from "./KeyboardTab";
 import {
@@ -129,8 +143,56 @@ import { TextInput } from "./TextInput";
 import {
 	TEXT_FONT_SIZE_MAX,
 	TEXT_FONT_SIZE_MIN,
+	type TextAlign,
+	type TextLayout,
 	type TextSegment,
 } from "./text";
+import {
+	applyTextPreset,
+	matchTextPreset,
+	TEXT_PRESETS,
+	type TextPreset,
+} from "./text-presets";
+import {
+	TEXT_ANIMATION_OPTIONS,
+	TEXT_SEGMENT_WEIGHT_OPTIONS,
+} from "./text-style";
+import {
+	ANGLE_PRESETS,
+	anglePresetMotion,
+	anglePresetPose,
+	applyMotionTemplate,
+	CAMERA3D_BLUR_MODE_SEEDS,
+	CAMERA3D_BOKEH_MAX_STRENGTH,
+	CAMERA3D_LIMITS,
+	CAMERA3D_MIN_SHOT_DURATION,
+	CAMERA3D_RESET_POSE,
+	CAMERA3D_SCENES,
+	CAMERA3D_TRANSITION_LIMITS,
+	type Camera3DAnglePreset,
+	type Camera3DBlurMode,
+	type Camera3DBlurScalarKey,
+	type Camera3DFlipAxis,
+	type Camera3DMotionEasing,
+	type Camera3DMotionTemplate,
+	type Camera3DProperties,
+	type Camera3DPropertyKey,
+	type Camera3DScene,
+	type Camera3DSegment,
+	camera3DPosesEqual,
+	camera3dBlurLimit,
+	cssPreviewTransform,
+	defaultCamera3DBlur,
+	flipCamera3DSegment,
+	getEndPose,
+	getMotionEasing,
+	getStartPose,
+	MOTION_EASINGS,
+	MOTION_TEMPLATES,
+	matchAnglePreset,
+	setMotion,
+} from "./three-d";
+import { heldTimeBefore, holdWindows } from "./timeline-holds";
 import {
 	ComingSoonTooltip,
 	EditorButton,
@@ -144,6 +206,7 @@ import {
 	topSlideAnimateClasses,
 } from "./ui";
 import { formatTime } from "./utils";
+import { ZoomModeHelper } from "./ZoomModeHelper";
 
 // Split out of the sidebar chunk: the captions tab is not visible at first
 // paint (Kobalte only mounts the selected tab), and its code is heavy. The
@@ -511,13 +574,21 @@ export function ConfigSidebar() {
 			| "captions",
 	});
 
+	// Clip selection is a timeline-only affordance (highlight, Delete key,
+	// multi-select); it must not swap the sidebar away from the current tab.
+	const sidebarSelection = () => {
+		const selection = editorState.timeline.selection;
+		return selection && selection.type !== "clip" ? selection : null;
+	};
+
 	let scrollRef!: HTMLDivElement;
 
 	return (
 		<KTabs
 			value={
-				editorState.timeline.selection ||
-				editorState.timeline.audioPicker !== null
+				sidebarSelection() ||
+				editorState.timeline.audioPicker !== null ||
+				editorState.timeline.camera3dSetup !== null
 					? undefined
 					: state.selectedTab
 			}
@@ -556,13 +627,13 @@ export function ConfigSidebar() {
 							value={item.id}
 							class={cx(
 								"flex relative z-10 flex-1 justify-center items-center px-4 py-2 transition-colors group disabled:opacity-50 focus:outline-hidden",
-								editorState.timeline.selection
+								sidebarSelection()
 									? "text-gray-11"
 									: "text-gray-11 data-selected:text-gray-12",
 							)}
 							onClick={() => {
 								// Clear any active selection first
-								if (editorState.timeline.selection) {
+								if (sidebarSelection()) {
 									setEditorState("timeline", "selection", null);
 								}
 								if (editorState.timeline.audioPicker !== null) {
@@ -570,6 +641,9 @@ export function ConfigSidebar() {
 								}
 								if (editorState.timeline.audioReplace !== null) {
 									setEditorState("timeline", "audioReplace", null);
+								}
+								if (editorState.timeline.camera3dSetup !== null) {
+									setEditorState("timeline", "camera3dSetup", null);
 								}
 								setState("selectedTab", item.id);
 								scrollRef.scrollTo({
@@ -594,8 +668,9 @@ export function ConfigSidebar() {
 				{/** Center the indicator with the icon */}
 				<Show
 					when={
-						!editorState.timeline.selection &&
-						editorState.timeline.audioPicker === null
+						!sidebarSelection() &&
+						editorState.timeline.audioPicker === null &&
+						editorState.timeline.camera3dSetup === null
 					}
 				>
 					<KTabs.Indicator class="absolute top-0 left-0 w-full h-full transition-transform duration-200 ease-in-out pointer-events-none will-change-transform">
@@ -611,9 +686,10 @@ export function ConfigSidebar() {
 				class="custom-scroll overflow-x-hidden overflow-y-scroll text-[0.875rem] flex-1 min-h-0"
 				classList={{
 					hidden:
-						!!editorState.timeline.selection ||
+						!!sidebarSelection() ||
 						editorState.timeline.audioPicker !== null ||
-						editorState.timeline.audioReplace !== null,
+						editorState.timeline.audioReplace !== null ||
+						editorState.timeline.camera3dSetup !== null,
 				}}
 			>
 				<BackgroundConfig
@@ -739,6 +815,7 @@ export function ConfigSidebar() {
 							/>
 						</Field>
 					)}
+					<SyncOffsetsConfig />
 				</KTabs.Content>
 				<KTabs.Content
 					value="cursor"
@@ -1012,19 +1089,21 @@ export function ConfigSidebar() {
 				class="custom-scroll p-4 top-16 left-0 right-0 bottom-0 text-[0.875rem] space-y-4 bg-gray-1 dark:bg-gray-2 z-50"
 				classList={{
 					hidden:
-						!editorState.timeline.selection &&
+						!sidebarSelection() &&
 						editorState.timeline.audioPicker === null &&
-						editorState.timeline.audioReplace === null,
+						editorState.timeline.audioReplace === null &&
+						editorState.timeline.camera3dSetup === null,
 					"animate-in slide-in-from-bottom-2 fade-in":
-						!!editorState.timeline.selection ||
+						!!sidebarSelection() ||
 						editorState.timeline.audioPicker !== null ||
-						editorState.timeline.audioReplace !== null,
+						editorState.timeline.audioReplace !== null ||
+						editorState.timeline.camera3dSetup !== null,
 				}}
 			>
 				<Show
 					when={
 						editorState.timeline.audioPicker !== null &&
-						!editorState.timeline.selection &&
+						!sidebarSelection() &&
 						editorState.timeline.audioReplace === null
 					}
 				>
@@ -1035,6 +1114,22 @@ export function ConfigSidebar() {
 						}}
 						onClose={() => setEditorState("timeline", "audioPicker", null)}
 					/>
+				</Show>
+				<Show
+					when={
+						!sidebarSelection() &&
+						editorState.timeline.audioPicker === null &&
+						editorState.timeline.audioReplace === null
+							? editorState.timeline.camera3dSetup
+							: null
+					}
+				>
+					{(setup) => (
+						<Camera3DSetupPanel
+							setup={setup()}
+							onClose={() => setEditorState("timeline", "camera3dSetup", null)}
+						/>
+					)}
 				</Show>
 				<Show
 					when={(() => {
@@ -1058,7 +1153,7 @@ export function ConfigSidebar() {
 				<Show
 					when={
 						editorState.timeline.audioReplace === null
-							? editorState.timeline.selection
+							? sidebarSelection()
 							: null
 					}
 				>
@@ -1437,6 +1532,114 @@ export function ConfigSidebar() {
 									return { selection: zoomSelection, segments };
 								})()}
 							>
+								{(value) => {
+									const totalZoomSegments = () =>
+										project.timeline?.zoomSegments?.length ?? 0;
+
+									// The sidebar header is narrow, so the count stays terse and
+									// "Select all" is an inline text action rather than a third
+									// full button, which would wrap.
+									const selectionLabel = () => {
+										const count = value().segments.length;
+										const total = totalZoomSegments();
+										if (total > 1 && count === total)
+											return `All ${total} selected`;
+										if (total > 1) return `${count} of ${total} selected`;
+										return `${count} selected`;
+									};
+
+									return (
+										<div class="space-y-4">
+											<div class="flex flex-row justify-between items-center">
+												<div class="flex gap-2 items-center min-w-0">
+													<EditorButton
+														onClick={() =>
+															setEditorState("timeline", "selection", null)
+														}
+														leftIcon={<IconLucideCheck />}
+													>
+														Done
+													</EditorButton>
+													<span class="text-sm text-gray-10 whitespace-nowrap">
+														{selectionLabel()}
+													</span>
+													<Show
+														when={value().segments.length < totalZoomSegments()}
+													>
+														<button
+															type="button"
+															class="text-sm font-medium whitespace-nowrap text-blue-11 hover:underline outline-hidden focus-visible:underline"
+															onClick={() =>
+																setEditorState("timeline", "selection", {
+																	type: "zoom",
+																	indices: Array.from(
+																		{ length: totalZoomSegments() },
+																		(_, i) => i,
+																	),
+																})
+															}
+														>
+															Select all
+														</button>
+													</Show>
+												</div>
+												<EditorButton
+													variant="danger"
+													onClick={() => {
+														projectActions.deleteZoomSegments(
+															value().segments.map((s) => s.index),
+														);
+													}}
+													leftIcon={<IconCapTrash />}
+												>
+													Delete
+												</EditorButton>
+											</div>
+											<Show
+												when={value().segments.length === 1}
+												fallback={
+													<ZoomMultiSegmentConfig segments={value().segments} />
+												}
+											>
+												<For each={value().segments}>
+													{(item) => (
+														<div class="p-4 rounded-lg border border-gray-200">
+															<ZoomSegmentConfig
+																segment={item.segment}
+																segmentIndex={item.index}
+															/>
+														</div>
+													)}
+												</For>
+											</Show>
+										</div>
+									);
+								}}
+							</Show>
+							<Show
+								when={(() => {
+									const camera3dSelection = selection();
+									if (camera3dSelection.type !== "3d") return;
+
+									const segments = camera3dSelection.indices
+										.map((index) => ({
+											index,
+											segment: project.timeline?.camera3dSegments?.[index],
+										}))
+										.filter(
+											(
+												item,
+											): item is { index: number; segment: Camera3DSegment } =>
+												item.segment !== undefined,
+										);
+
+									if (segments.length === 0) {
+										setEditorState("timeline", "selection", null);
+										return;
+									}
+									return { selection: camera3dSelection, segments };
+								})()}
+							>
 								{(value) => (
 									<div class="space-y-4">
 										<div class="flex flex-row justify-between items-center">
@@ -1450,7 +1653,7 @@ export function ConfigSidebar() {
 													Done
 												</EditorButton>
 												<span class="text-sm text-gray-10">
-													{value().segments.length} zoom{" "}
+													{value().segments.length} 3D{" "}
 													{value().segments.length === 1
 														? "segment"
 														: "segments"}{" "}
@@ -1460,7 +1663,7 @@ export function ConfigSidebar() {
 											<EditorButton
 												variant="danger"
 												onClick={() => {
-													projectActions.deleteZoomSegments(
+													projectActions.deleteCamera3DSegments(
 														value().segments.map((s) => s.index),
 													);
 												}}
@@ -1470,32 +1673,18 @@ export function ConfigSidebar() {
 											</EditorButton>
 										</div>
 										<Show
-											when={value().segments.length === 1}
-											fallback={
-												<div class="grid grid-cols-3 gap-4">
-													<Index each={value().segments}>
-														{(item, index) => (
-															<div class="p-2.5 rounded-lg border border-gray-4 bg-gray-3">
-																<ZoomSegmentPreview
-																	segment={item().segment}
-																	segmentIndex={index}
-																/>
-															</div>
-														)}
-													</Index>
-												</div>
+											when={
+												value().segments.length === 1 && value().segments[0]
 											}
 										>
-											<For each={value().segments}>
-												{(item) => (
-													<div class="p-4 rounded-lg border border-gray-200">
-														<ZoomSegmentConfig
-															segment={item.segment}
-															segmentIndex={item.index}
-														/>
-													</div>
-												)}
-											</For>
+											{(item) => (
+												<div class="p-4 rounded-lg border border-gray-200">
+													<Camera3DSegmentConfig
+														segment={item().segment}
+														segmentIndex={item().index}
+													/>
+												</div>
+											)}
 										</Show>
 									</div>
 								)}
@@ -1560,79 +1749,6 @@ export function ConfigSidebar() {
 																	.sort((a, b) => b - a)
 																	.forEach((idx) => {
 																		projectActions.deleteSceneSegment(idx);
-																	});
-															}}
-															leftIcon={<IconCapTrash />}
-														>
-															Delete
-														</EditorButton>
-													</div>
-												</div>
-											</Show>
-										)}
-									</Show>
-								)}
-							</Show>
-							<Show
-								when={(() => {
-									const clipSelection = selection();
-									if (clipSelection.type !== "clip") return;
-
-									const segments = clipSelection.indices
-										.map((idx) => ({
-											segment: project.timeline?.segments?.[idx],
-											index: idx,
-										}))
-										.filter(
-											(s): s is { segment: TimelineSegment; index: number } =>
-												s.segment !== undefined,
-										);
-
-									if (segments.length === 0) return;
-									return { selection: clipSelection, segments };
-								})()}
-							>
-								{(value) => (
-									<Show when={value().segments[0]}>
-										{(firstSegment) => (
-											<Show
-												when={value().segments.length > 1}
-												fallback={
-													<ClipSegmentConfig
-														segment={firstSegment().segment}
-														segmentIndex={firstSegment().index}
-													/>
-												}
-											>
-												<div class="space-y-4">
-													<div class="flex flex-row justify-between items-center">
-														<div class="flex gap-2 items-center">
-															<EditorButton
-																onClick={() =>
-																	setEditorState("timeline", "selection", null)
-																}
-																leftIcon={<IconLucideCheck />}
-															>
-																Done
-															</EditorButton>
-															<span class="text-sm text-gray-10">
-																{value().segments.length} clip{" "}
-																{value().segments.length === 1
-																	? "segment"
-																	: "segments"}{" "}
-																selected
-															</span>
-														</div>
-														<EditorButton
-															variant="danger"
-															onClick={() => {
-																const indices = value().selection.indices;
-
-																// Delete segments in reverse order to maintain indices
-																[...indices]
-																	.sort((a, b) => b - a)
-																	.forEach((idx) => {
-																		projectActions.deleteClipSegment(idx);
 																	});
 															}}
 															leftIcon={<IconCapTrash />}
@@ -2864,6 +2980,7 @@ function BackgroundConfig(props: {
 					}}
 				/>
 			</Field>
+			<ColorCorrectionSection target="screen" scrollRef={props.scrollRef} />
 			{/* <ComingSoonTooltip>
             <Field name="Inset" icon={<IconCapInset />}>
               <Slider
@@ -3223,6 +3340,7 @@ function CameraConfig(props: { scrollRef: HTMLDivElement }) {
 					/>
 				</div>
 			</Field>
+			<ColorCorrectionSection target="camera" scrollRef={props.scrollRef} />
 			{/* <ComingSoonTooltip>
             <Field name="Shadow" icon={<IconCapShadow />}>
               <Slider
@@ -3374,12 +3492,161 @@ function HexColorInput(props: {
 	);
 }
 
+function TextStyleSelect<T extends string | number>(props: {
+	options: { label: string; value: T }[];
+	value: T;
+	onChange: (value: T) => void;
+	fallbackLabel?: (value: T) => string;
+}) {
+	const selected = () =>
+		props.options.find((option) => option.value === props.value) ?? {
+			label: props.fallbackLabel?.(props.value) ?? String(props.value),
+			value: props.value,
+		};
+
+	return (
+		<KSelect
+			options={props.options}
+			optionValue="value"
+			optionTextValue="label"
+			value={selected()}
+			onChange={(option) => {
+				if (option) props.onChange(option.value);
+			}}
+			itemComponent={(selectItemProps) => (
+				<MenuItem<typeof KSelect.Item>
+					as={KSelect.Item}
+					item={selectItemProps.item}
+				>
+					<KSelect.ItemLabel class="flex-1">
+						{selectItemProps.item.rawValue.label}
+					</KSelect.ItemLabel>
+					<KSelect.ItemIndicator class="ml-auto text-blue-9">
+						<IconCapCircleCheck />
+					</KSelect.ItemIndicator>
+				</MenuItem>
+			)}
+		>
+			<KSelect.Trigger class="flex w-full items-center justify-between rounded-md border border-gray-3 bg-gray-2 px-3 py-2 text-sm text-gray-12 transition-colors hover:border-gray-4 hover:bg-gray-3 focus:border-blue-9 focus:outline-hidden focus:ring-1 focus:ring-blue-9">
+				<KSelect.Value<{ label: string; value: T }> class="truncate">
+					{(state) => state.selectedOption()?.label ?? selected().label}
+				</KSelect.Value>
+				<KSelect.Icon>
+					<IconCapChevronDown class="size-4 shrink-0 transform transition-transform data-expanded:rotate-180 text-(--gray-500)" />
+				</KSelect.Icon>
+			</KSelect.Trigger>
+			<KSelect.Portal>
+				<PopperContent<typeof KSelect.Content>
+					as={KSelect.Content}
+					class={cx(topSlideAnimateClasses, "z-50")}
+				>
+					<MenuItemList<typeof KSelect.Listbox>
+						class="overflow-y-auto max-h-52"
+						as={KSelect.Listbox}
+					/>
+				</PopperContent>
+			</KSelect.Portal>
+		</KSelect>
+	);
+}
+
+const TEXT_PRESET_HOVER_FX: Record<string, string> = {
+	fade: "group-hover:opacity-70",
+	slideUp: "group-hover:-translate-y-1",
+	slideDown: "group-hover:translate-y-1",
+	pop: "group-hover:scale-110",
+	typewriter: "",
+	none: "",
+};
+
+function TextPresetCard(props: {
+	preset: TextPreset;
+	active: boolean;
+	onApply: () => void;
+}) {
+	const style = () => props.preset.style;
+	const stackCss = () =>
+		style()
+			.fontStack.map((family) =>
+				["sans-serif", "serif", "monospace"].includes(family)
+					? family
+					: `"${family}"`,
+			)
+			.join(", ");
+
+	return (
+		<button
+			type="button"
+			onClick={() => props.onApply()}
+			class={cx(
+				"group relative flex h-16 flex-col items-center justify-center overflow-hidden rounded-lg border px-2 pb-3 transition-colors",
+				props.active
+					? "border-blue-9 ring-1 ring-blue-9"
+					: "border-gray-3 hover:border-gray-5",
+			)}
+			style={{
+				background: "linear-gradient(135deg, #17181c 0%, #2a2c33 100%)",
+			}}
+		>
+			<span
+				class={cx(
+					"max-w-full truncate text-white transition-all duration-200",
+					TEXT_PRESET_HOVER_FX[style().animationIn],
+				)}
+				style={{
+					"font-family": stackCss(),
+					"font-weight": String(style().fontWeight),
+					"font-style": style().italic ? "italic" : "normal",
+					"font-size": `${Math.min(Math.max(style().fontSize * 0.22, 11), 24)}px`,
+					"letter-spacing": `${style().letterSpacing * 0.35}px`,
+					"line-height": 1.1,
+					"text-shadow":
+						style().shadow > 0
+							? `0 1px 3px rgba(0, 0, 0, ${0.45 + style().shadow * 0.4})`
+							: "none",
+				}}
+			>
+				{props.preset.sample}
+			</span>
+			<span class="absolute inset-x-0 bottom-1 text-center text-[10px] font-medium text-white/50">
+				{props.preset.name}
+			</span>
+		</button>
+	);
+}
+
+// The renderer also supports splitLeft/splitRight takeovers; only these two
+// are exposed for now.
+const TEXT_LAYOUT_OPTIONS: {
+	value: TextLayout;
+	label: string;
+	icon: ValidComponent;
+}[] = [
+	{ value: "overlay", label: "Overlay", icon: IconLucideBoxSelect },
+	{ value: "fullscreen", label: "Fullscreen", icon: IconLucideMaximize },
+];
+
+const TEXT_LAYOUT_CENTERS: Partial<
+	Record<TextLayout, { x: number; y: number }>
+> = {
+	fullscreen: { x: 0.5, y: 0.5 },
+};
+
+const TEXT_ALIGN_OPTIONS: { value: TextAlign; icon: ValidComponent }[] = [
+	{ value: "left", icon: IconLucideAlignLeft },
+	{ value: "center", icon: IconLucideAlignCenter },
+	{ value: "right", icon: IconLucideAlignRight },
+];
+
 function TextSegmentConfig(props: {
 	segmentIndex: number;
 	segment: TextSegment;
 	brandColorSwatches: OrganizationBrandColorSwatch[];
 }) {
 	const { setProject } = useEditorContext();
+	const [installedFonts] = createResource(listSystemFonts, {
+		initialValue: [],
+	});
 	const clampNumber = (value: number, min: number, max: number) =>
 		Math.min(Math.max(Number.isFinite(value) ? value : min, min), max);
 
@@ -3394,6 +3661,24 @@ function TextSegmentConfig(props: {
 			}),
 		);
 	};
+
+	const activePresetId = createMemo(() =>
+		matchTextPreset(props.segment, installedFonts()),
+	);
+
+	const setAnimationDuration = (
+		key: "animationInDuration" | "animationOutDuration",
+		value: number,
+	) =>
+		updateSegment((segment) => {
+			segment[key] = clampNumber(value, 0, 3);
+			// Old builds only know fadeDuration; keep it tracking the slower
+			// edge so a project opened there still fades sensibly.
+			segment.fadeDuration = Math.max(
+				segment.animationInDuration ?? 0.15,
+				segment.animationOutDuration ?? 0.15,
+			);
+		});
 
 	return (
 		<div class="space-y-4">
@@ -3424,148 +3709,318 @@ function TextSegmentConfig(props: {
 					</div>
 				</div>
 			</Field>
-			<Field name="Size" icon={<IconCapEnlarge class="size-4" />}>
-				<Slider
-					value={[
-						clampNumber(
-							props.segment.fontSize,
-							TEXT_FONT_SIZE_MIN,
-							TEXT_FONT_SIZE_MAX,
-						),
-					]}
-					onChange={([value]) =>
-						updateSegment((segment) => {
-							const newFontSize = clampNumber(
-								value,
-								TEXT_FONT_SIZE_MIN,
-								TEXT_FONT_SIZE_MAX,
-							);
-							const oldFontSize = segment.fontSize || 48;
-							const scale = newFontSize / oldFontSize;
-
-							segment.fontSize = newFontSize;
-
-							// Scale the box with the font so line wrapping is
-							// preserved; keep the top edge fixed since the renderer
-							// anchors text at the top of the box (the canvas overlay
-							// re-hugs the box to the exact glyph bounds when visible).
-							if (segment.size && segment.center) {
-								const topEdge = segment.center.y - segment.size.y / 2;
-								segment.size.x = Math.min(segment.size.x * scale, 1);
-								segment.size.y = segment.size.y * scale;
-								segment.center.y = topEdge + segment.size.y / 2;
-							}
-						})
-					}
-					minValue={TEXT_FONT_SIZE_MIN}
-					maxValue={TEXT_FONT_SIZE_MAX}
-					step={1}
-				/>
+			<Field name="Layout" icon={<IconLucideBoxSelect class="size-4" />}>
+				<div class="flex flex-col gap-3">
+					<div class="grid grid-cols-2 gap-1 rounded-lg border border-gray-3 bg-gray-2 p-1">
+						<For each={TEXT_LAYOUT_OPTIONS}>
+							{(option) => (
+								<button
+									type="button"
+									title={option.label}
+									class={cx(
+										"flex flex-col items-center gap-1 rounded-md py-1.5 transition-colors",
+										(props.segment.layout ?? "overlay") === option.value
+											? "bg-gray-5 text-gray-12"
+											: "text-gray-10 hover:text-gray-12",
+									)}
+									onClick={() =>
+										updateSegment((segment) => {
+											if ((segment.layout ?? "overlay") === option.value)
+												return;
+											segment.layout = option.value;
+											// A takeover layout implies where the text
+											// belongs; place it there so the result reads
+											// immediately (still draggable afterwards).
+											const center = TEXT_LAYOUT_CENTERS[option.value];
+											if (center) segment.center = { ...center };
+										})
+									}
+								>
+									<Dynamic component={option.icon} class="size-4" />
+									<span class="text-[9px] font-medium leading-none">
+										{option.label}
+									</span>
+								</button>
+							)}
+						</For>
+					</div>
+					<Show when={(props.segment.layout ?? "overlay") === "fullscreen"}>
+						<p class="text-xs leading-snug text-gray-10">
+							Pauses the video while the text is shown, then resumes where it
+							left off.
+						</p>
+					</Show>
+					<Show when={(props.segment.layout ?? "overlay") !== "overlay"}>
+						<div class="flex flex-col gap-1">
+							<span class="text-xs text-gray-11">Screen transition</span>
+							<Slider
+								value={[
+									clampNumber(props.segment.layoutTransition ?? 0.5, 0.1, 1.5),
+								]}
+								onChange={([value]) =>
+									updateSegment((segment) => {
+										segment.layoutTransition = clampNumber(value, 0.1, 1.5);
+									})
+								}
+								minValue={0.1}
+								maxValue={1.5}
+								step={0.05}
+								formatTooltip="s"
+							/>
+						</div>
+					</Show>
+				</div>
 			</Field>
-			<Field name="Style" icon={<IconLucideSparkles class="size-4" />}>
-				<div class="flex flex-col gap-2">
-					<KSelect
-						options={[
-							{ label: "Normal", value: 400 },
-							{ label: "Medium", value: 500 },
-							{ label: "Bold", value: 700 },
-						]}
-						optionValue="value"
-						optionTextValue="label"
-						value={{
-							label: "Custom",
-							value: props.segment.fontWeight,
-						}}
-						onChange={(value) => {
-							if (!value) return;
-							updateSegment((segment) => {
-								segment.fontWeight = value.value;
-							});
-						}}
-						itemComponent={(selectItemProps) => (
-							<MenuItem<typeof KSelect.Item>
-								as={KSelect.Item}
-								item={selectItemProps.item}
-							>
-								<KSelect.ItemLabel class="flex-1">
-									{selectItemProps.item.rawValue.label}
-								</KSelect.ItemLabel>
-								<KSelect.ItemIndicator class="ml-auto text-blue-9">
-									<IconCapCircleCheck />
-								</KSelect.ItemIndicator>
-							</MenuItem>
+			<Field name="Templates" icon={<IconLucideSparkles class="size-4" />}>
+				<div class="grid grid-cols-2 gap-2">
+					<For each={TEXT_PRESETS}>
+						{(preset) => (
+							<TextPresetCard
+								preset={preset}
+								active={activePresetId() === preset.id}
+								onApply={() =>
+									updateSegment((segment) =>
+										applyTextPreset(segment, preset, installedFonts()),
+									)
+								}
+							/>
 						)}
-					>
-						<KSelect.Trigger class="flex w-full items-center justify-between rounded-md border border-gray-3 bg-gray-2 px-3 py-2 text-sm text-gray-12 transition-colors hover:border-gray-4 hover:bg-gray-3 focus:border-blue-9 focus:outline-hidden focus:ring-1 focus:ring-blue-9">
-							<KSelect.Value<{ label: string; value: number }> class="truncate">
-								{(state) => {
-									const selected = state.selectedOption();
-									if (selected) return selected.label;
-									const weight = props.segment.fontWeight;
-									const option = [
-										{ label: "Normal", value: 400 },
-										{ label: "Medium", value: 500 },
-										{ label: "Bold", value: 700 },
-									].find((o) => o.value === weight);
-									if (option) return option.label;
-									if (weight != null) return `Custom (${weight})`;
-									return "Normal";
-								}}
-							</KSelect.Value>
-							<KSelect.Icon>
-								<IconCapChevronDown class="size-4 shrink-0 transform transition-transform data-expanded:rotate-180 text-(--gray-500)" />
-							</KSelect.Icon>
-						</KSelect.Trigger>
-						<KSelect.Portal>
-							<PopperContent<typeof KSelect.Content>
-								as={KSelect.Content}
-								class={cx(topSlideAnimateClasses, "z-50")}
-							>
-								<MenuItemList<typeof KSelect.Listbox>
-									class="overflow-y-auto max-h-40"
-									as={KSelect.Listbox}
-								/>
-							</PopperContent>
-						</KSelect.Portal>
-					</KSelect>
-
-					<div class="flex items-center justify-between pt-1">
-						<span class="text-xs text-gray-11">Italic</span>
-						<Toggle
-							checked={props.segment.italic}
-							onChange={(value) =>
+					</For>
+				</div>
+			</Field>
+			<Field name="Font" icon={<IconLucideType class="size-4" />}>
+				<div class="flex flex-col gap-2">
+					<FontPicker
+						value={props.segment.fontFamily ?? "sans-serif"}
+						onChange={(family) =>
+							updateSegment((segment) => {
+								segment.fontFamily = family;
+							})
+						}
+					/>
+					<div class="flex items-center gap-2">
+						<div class="flex-1">
+							<TextStyleSelect
+								options={TEXT_SEGMENT_WEIGHT_OPTIONS}
+								value={props.segment.fontWeight}
+								onChange={(value) =>
+									updateSegment((segment) => {
+										segment.fontWeight = value;
+									})
+								}
+								fallbackLabel={(value) => `Custom (${value})`}
+							/>
+						</div>
+						<button
+							type="button"
+							title="Italic"
+							class={cx(
+								"flex size-9 shrink-0 items-center justify-center rounded-md border transition-colors",
+								props.segment.italic
+									? "border-blue-9 bg-blue-9/10 text-blue-9"
+									: "border-gray-3 bg-gray-2 text-gray-11 hover:bg-gray-3",
+							)}
+							onClick={() =>
 								updateSegment((segment) => {
-									segment.italic = value;
+									segment.italic = !segment.italic;
 								})
 							}
+						>
+							<IconLucideItalic class="size-4" />
+						</button>
+					</div>
+					<div class="flex flex-col gap-1">
+						<span class="text-xs text-gray-11">Size</span>
+						<Slider
+							value={[
+								clampNumber(
+									props.segment.fontSize,
+									TEXT_FONT_SIZE_MIN,
+									TEXT_FONT_SIZE_MAX,
+								),
+							]}
+							onChange={([value]) =>
+								updateSegment((segment) => {
+									const newFontSize = clampNumber(
+										value,
+										TEXT_FONT_SIZE_MIN,
+										TEXT_FONT_SIZE_MAX,
+									);
+									const oldFontSize = segment.fontSize || 48;
+									const scale = newFontSize / oldFontSize;
+
+									segment.fontSize = newFontSize;
+
+									// Scale the box with the font so line wrapping is
+									// preserved; keep the top edge fixed since the renderer
+									// anchors text at the top of the box (the canvas overlay
+									// re-hugs the box to the exact glyph bounds when visible).
+									if (segment.size && segment.center) {
+										const topEdge = segment.center.y - segment.size.y / 2;
+										segment.size.x = Math.min(segment.size.x * scale, 1);
+										segment.size.y = segment.size.y * scale;
+										segment.center.y = topEdge + segment.size.y / 2;
+									}
+								})
+							}
+							minValue={TEXT_FONT_SIZE_MIN}
+							maxValue={TEXT_FONT_SIZE_MAX}
+							step={1}
+						/>
+					</div>
+				</div>
+			</Field>
+			<Field name="Layout" icon={<IconLucideAlignCenter class="size-4" />}>
+				<div class="flex flex-col gap-3">
+					<div class="grid grid-cols-3 gap-1 rounded-lg border border-gray-3 bg-gray-2 p-1">
+						<For each={TEXT_ALIGN_OPTIONS}>
+							{(option) => (
+								<button
+									type="button"
+									class={cx(
+										"flex items-center justify-center rounded-md py-1.5 transition-colors",
+										(props.segment.align ?? "center") === option.value
+											? "bg-gray-5 text-gray-12"
+											: "text-gray-10 hover:text-gray-12",
+									)}
+									onClick={() =>
+										updateSegment((segment) => {
+											segment.align = option.value;
+										})
+									}
+								>
+									<Dynamic component={option.icon} class="size-4" />
+								</button>
+							)}
+						</For>
+					</div>
+					<div class="flex flex-col gap-1">
+						<span class="text-xs text-gray-11">Line height</span>
+						<Slider
+							value={[clampNumber(props.segment.lineHeight ?? 1.2, 0.8, 2)]}
+							onChange={([value]) =>
+								updateSegment((segment) => {
+									segment.lineHeight = clampNumber(value, 0.8, 2);
+								})
+							}
+							minValue={0.8}
+							maxValue={2}
+							step={0.05}
+						/>
+					</div>
+					<div class="flex flex-col gap-1">
+						<span class="text-xs text-gray-11">Letter spacing</span>
+						<Slider
+							value={[clampNumber(props.segment.letterSpacing ?? 0, -2, 20)]}
+							onChange={([value]) =>
+								updateSegment((segment) => {
+									segment.letterSpacing = clampNumber(value, -2, 20);
+								})
+							}
+							minValue={-2}
+							maxValue={20}
+							step={0.5}
+							formatTooltip="px"
 						/>
 					</div>
 				</div>
 			</Field>
 			<Field name="Color" icon={<IconLucidePalette class="size-4" />}>
-				<HexColorInput
-					value={props.segment.color}
-					brandColorSwatches={props.brandColorSwatches}
-					onChange={(value) =>
-						updateSegment((segment) => {
-							segment.color = value;
-						})
-					}
-				/>
+				<div class="flex flex-col gap-3">
+					<HexColorInput
+						value={props.segment.color}
+						brandColorSwatches={props.brandColorSwatches}
+						onChange={(value) =>
+							updateSegment((segment) => {
+								segment.color = value;
+							})
+						}
+					/>
+					<div class="flex flex-col gap-1">
+						<span class="text-xs text-gray-11">Opacity</span>
+						<Slider
+							value={[clampNumber(props.segment.opacity ?? 1, 0, 1)]}
+							onChange={([value]) =>
+								updateSegment((segment) => {
+									segment.opacity = clampNumber(value, 0, 1);
+								})
+							}
+							minValue={0}
+							maxValue={1}
+							step={0.01}
+						/>
+					</div>
+					<div class="flex flex-col gap-1">
+						<span class="text-xs text-gray-11">Shadow</span>
+						<Slider
+							value={[clampNumber(props.segment.shadow ?? 0, 0, 1)]}
+							onChange={([value]) =>
+								updateSegment((segment) => {
+									segment.shadow = clampNumber(value, 0, 1);
+								})
+							}
+							minValue={0}
+							maxValue={1}
+							step={0.01}
+						/>
+					</div>
+				</div>
 			</Field>
-			<Field name="Fade Duration" icon={<IconLucideTimer class="size-4" />}>
-				<Slider
-					value={[clampNumber(props.segment.fadeDuration ?? 0.15, 0, 1)]}
-					onChange={([value]) =>
-						updateSegment((segment) => {
-							segment.fadeDuration = clampNumber(value, 0, 1);
-						})
-					}
-					minValue={0}
-					maxValue={1}
-					step={0.01}
-					formatTooltip="s"
-				/>
+			<Field name="Animation" icon={<IconLucideTimer class="size-4" />}>
+				<div class="flex flex-col gap-3">
+					<div class="flex flex-col gap-2">
+						<span class="text-xs text-gray-11">In</span>
+						<TextStyleSelect
+							options={TEXT_ANIMATION_OPTIONS}
+							value={props.segment.animationIn ?? "fade"}
+							onChange={(value) =>
+								updateSegment((segment) => {
+									segment.animationIn = value;
+								})
+							}
+						/>
+						<Show when={(props.segment.animationIn ?? "fade") !== "none"}>
+							<Slider
+								value={[
+									clampNumber(props.segment.animationInDuration ?? 0.15, 0, 3),
+								]}
+								onChange={([value]) =>
+									setAnimationDuration("animationInDuration", value)
+								}
+								minValue={0}
+								maxValue={3}
+								step={0.05}
+								formatTooltip="s"
+							/>
+						</Show>
+					</div>
+					<div class="flex flex-col gap-2">
+						<span class="text-xs text-gray-11">Out</span>
+						<TextStyleSelect
+							options={TEXT_ANIMATION_OPTIONS}
+							value={props.segment.animationOut ?? "fade"}
+							onChange={(value) =>
+								updateSegment((segment) => {
+									segment.animationOut = value;
+								})
+							}
+						/>
+						<Show when={(props.segment.animationOut ?? "fade") !== "none"}>
+							<Slider
+								value={[
+									clampNumber(props.segment.animationOutDuration ?? 0.15, 0, 3),
+								]}
+								onChange={([value]) =>
+									setAnimationDuration("animationOutDuration", value)
+								}
+								minValue={0}
+								maxValue={3}
+								step={0.05}
+								formatTooltip="s"
+							/>
+						</Show>
+					</div>
+				</div>
 			</Field>
 		</div>
 	);
@@ -4098,32 +4553,961 @@ function MaskSegmentConfig(props: {
 	);
 }
 
+const CAMERA3D_SLIDERS: Array<{
+	key: Camera3DPropertyKey;
+	label: string;
+	unit: string;
+}> = [
+	{ key: "tiltX", label: "Tilt X", unit: "°" },
+	{ key: "tiltY", label: "Tilt Y", unit: "°" },
+	{ key: "roll", label: "Roll", unit: "°" },
+	{ key: "rotateX", label: "Rotate X", unit: "°" },
+	{ key: "rotateY", label: "Rotate Y", unit: "°" },
+	{ key: "fov", label: "Field of view", unit: "°" },
+	{ key: "zoom", label: "Zoom", unit: "" },
+	{ key: "panX", label: "Pan X", unit: "" },
+	{ key: "panY", label: "Pan Y", unit: "" },
+];
+
+function camera3dSliderIcon(key: Camera3DPropertyKey) {
+	switch (key) {
+		case "roll":
+			return <IconLucideRotateCw class="size-4" />;
+		case "fov":
+			return <IconLucideMaximize class="size-4" />;
+		case "zoom":
+			return <IconLucideSearch class="size-4" />;
+		case "panX":
+		case "panY":
+			return <IconLucideMove class="size-4" />;
+		default:
+			return <IconLucideRotate3d class="size-4" />;
+	}
+}
+
+const CAMERA3D_BLUR_MODE_OPTIONS: Array<{
+	value: Camera3DBlurMode;
+	label: string;
+}> = [
+	{ value: "none", label: "None" },
+	{ value: "radial", label: "Radial" },
+	{ value: "directional", label: "Directional" },
+	{ value: "tiltShift", label: "Tilt Shift" },
+];
+
+type Camera3DBlurSlider = {
+	key: Camera3DBlurScalarKey;
+	label: string;
+	unit: string;
+};
+
+// Each mode exposes only the parameters it actually reads, in display order.
+const CAMERA3D_BLUR_SLIDERS: Record<
+	Exclude<Camera3DBlurMode, "none">,
+	Camera3DBlurSlider[]
+> = {
+	radial: [
+		{ key: "strength", label: "Strength", unit: "" },
+		{ key: "focusX", label: "Focus X", unit: "" },
+		{ key: "focusY", label: "Focus Y", unit: "" },
+		{ key: "focusSize", label: "Focus size", unit: "" },
+		{ key: "falloff", label: "Falloff", unit: "" },
+	],
+	directional: [
+		{ key: "strength", label: "Strength", unit: "" },
+		{ key: "angle", label: "Angle", unit: "°" },
+		{ key: "dirPosition", label: "Position", unit: "" },
+		{ key: "falloff", label: "Falloff", unit: "" },
+	],
+	tiltShift: [
+		{ key: "strength", label: "Strength", unit: "" },
+		{ key: "focusY", label: "Scan", unit: "" },
+		{ key: "focusSize", label: "Focus size", unit: "" },
+		{ key: "angle", label: "Angle", unit: "°" },
+		{ key: "falloff", label: "Falloff", unit: "" },
+	],
+};
+
+function Camera3DTransitionInput(props: {
+	label: string;
+	value: number;
+	onChange: (value: number) => void;
+}) {
+	const [text, setText] = createWritableMemo(() => props.value.toString());
+
+	return (
+		<div class="flex flex-row justify-between items-center">
+			<span class="text-xs text-gray-11">{props.label}</span>
+			<div class="flex flex-row gap-1 items-center">
+				<NumberField.Root
+					value={text()}
+					onChange={setText}
+					rawValue={props.value}
+					onRawValueChange={(value) => {
+						if (Number.isNaN(value)) return;
+						props.onChange(
+							Math.min(
+								Math.max(value, CAMERA3D_TRANSITION_LIMITS.min),
+								CAMERA3D_TRANSITION_LIMITS.max,
+							),
+						);
+					}}
+					minValue={CAMERA3D_TRANSITION_LIMITS.min}
+					maxValue={CAMERA3D_TRANSITION_LIMITS.max}
+					step={CAMERA3D_TRANSITION_LIMITS.step}
+				>
+					<NumberField.Input
+						onBlur={() => {
+							if (text() === "" || Number.isNaN(props.value)) {
+								setText("0");
+								props.onChange(0);
+							}
+						}}
+						class="w-20 p-1.5 border rounded-lg bg-gray-1 focus-visible:outline-hidden"
+					/>
+				</NumberField.Root>
+				<span class="text-gray-11">s</span>
+			</div>
+		</div>
+	);
+}
+
+const CAMERA3D_ANGLE_PREVIEW_HEIGHT = 30;
+const CAMERA3D_TEMPLATE_PREVIEW_HEIGHT = 40;
+/** Scenes lead the section and are three across, so their cards read taller. */
+const CAMERA3D_SCENE_PREVIEW_HEIGHT = 48;
+/** The two pose cards are the panel's main control, so they read larger. */
+const CAMERA3D_POSE_PREVIEW_HEIGHT = 56;
+const CAMERA3D_PREVIEW_TRANSITION = "700ms ease-in-out";
+
+/**
+ * A `Field` that folds away. The header keeps the Field rhythm so a closed
+ * section reads as one more label in the column, with an optional summary that
+ * shows the state without opening it.
+ */
+function Camera3DSection(
+	props: ParentProps<{
+		name: string;
+		icon: JSX.Element;
+		summary?: string;
+		open: boolean;
+		onOpenChange: (open: boolean) => void;
+	}>,
+) {
+	return (
+		<KCollapsible open={props.open} onOpenChange={props.onOpenChange}>
+			<KCollapsible.Trigger class="flex flex-row gap-1.5 items-center w-full text-sm font-medium group text-gray-12 outline-hidden">
+				{props.icon}
+				{props.name}
+				<span class="flex flex-row gap-1.5 items-center ml-auto text-xs font-normal text-gray-10">
+					{props.summary}
+					<IconCapChevronDown class="transition-transform duration-200 size-3.5 group-data-expanded:rotate-180" />
+				</span>
+			</KCollapsible.Trigger>
+			<KCollapsible.Content class="overflow-hidden opacity-0 transition-opacity animate-collapsible-up data-expanded:animate-collapsible-down data-expanded:opacity-100">
+				<div class="pt-4">{props.children}</div>
+			</KCollapsible.Content>
+		</KCollapsible>
+	);
+}
+
+// A CSS-3D stand-in for the renderer: the perspective distance reproduces the
+// field of view at this card height and the rotations run in the renderer's
+// order (camera orbit, then the content plane's own fold).
+function Camera3DPosePreview(props: {
+	pose: Camera3DProperties;
+	height: number;
+	animate?: boolean;
+}) {
+	const style = () => cssPreviewTransform(props.pose, props.height);
+
+	return (
+		<div
+			class="overflow-hidden relative w-full rounded-md bg-gray-3"
+			style={{
+				height: `${props.height}px`,
+				perspective: `${style().perspective}px`,
+				transition: props.animate
+					? `perspective ${CAMERA3D_PREVIEW_TRANSITION}`
+					: undefined,
+			}}
+		>
+			<div
+				class="absolute inset-0 rounded-[3px] border shadow-sm border-gray-6 bg-gray-1 dark:bg-gray-5"
+				style={{
+					transform: style().transform,
+					transition: props.animate
+						? `transform ${CAMERA3D_PREVIEW_TRANSITION}`
+						: undefined,
+				}}
+			/>
+		</div>
+	);
+}
+
+/**
+ * One scene, as a card: the pose its first shot opens on, drifting to that
+ * shot's end pose while hovered. Shared by the panel's Scenes row and the empty
+ * track's setup flow, so the two always offer the same thing.
+ */
+function Camera3DSceneCard(props: {
+	scene: Camera3DScene;
+	shotCount?: number;
+	selected?: boolean;
+	onClick: () => void;
+}) {
+	const [hovered, setHovered] = createSignal(false);
+	const shotCount = () => props.shotCount ?? props.scene.shots.length;
+
+	return (
+		<button
+			type="button"
+			onClick={() => props.onClick()}
+			onMouseEnter={() => setHovered(true)}
+			onMouseLeave={() => setHovered(false)}
+			class={cx(
+				"flex flex-col gap-1 p-1 rounded-lg border transition-colors outline-hidden",
+				props.selected
+					? "border-blue-9 ring-1 ring-blue-9"
+					: "border-gray-4 hover:border-gray-7",
+			)}
+		>
+			<div class="relative">
+				<Camera3DPosePreview
+					animate
+					pose={hovered() ? props.scene.shots[0].to : props.scene.shots[0].from}
+					height={CAMERA3D_SCENE_PREVIEW_HEIGHT}
+				/>
+				<span class="absolute top-1 right-1 rounded px-1 text-[9px] leading-[14px] bg-gray-1/80 dark:bg-gray-2/80 text-gray-11">
+					{shotCount()} {shotCount() === 1 ? "shot" : "shots"}
+				</span>
+			</div>
+			<span class="text-[10px] leading-tight text-center text-gray-11">
+				{props.scene.name}
+			</span>
+		</button>
+	);
+}
+
+/**
+ * The empty 3D track's setup flow: pick a look and how many cuts it makes,
+ * with the track drawing the result live underneath. Confirming lays the whole
+ * chain down in one step.
+ */
+function Camera3DSetupPanel(props: {
+	setup: { sceneId: string; shots: number };
+	onClose: () => void;
+}) {
+	const { projectActions, setEditorState, totalDuration } = useEditorContext();
+
+	const scene = () =>
+		CAMERA3D_SCENES.find((item) => item.id === props.setup.sceneId) ??
+		CAMERA3D_SCENES[0];
+
+	// A shot under the minimum is a glitch rather than a cut, so a short video
+	// simply offers fewer of them.
+	const maxShots = () =>
+		Math.max(
+			1,
+			Math.min(
+				scene().shots.length,
+				Math.floor(totalDuration() / CAMERA3D_MIN_SHOT_DURATION),
+			),
+		);
+	const shots = () => Math.min(props.setup.shots, maxShots());
+
+	const updateSetup = (changes: Partial<{ sceneId: string; shots: number }>) =>
+		setEditorState("timeline", "camera3dSetup", (current) =>
+			current ? { ...current, ...changes } : current,
+		);
+
+	return (
+		<div class="flex flex-col gap-4">
+			<div class="flex flex-row gap-2 items-center">
+				<EditorButton
+					onClick={() => props.onClose()}
+					leftIcon={<IconLucideX />}
+				>
+					Close
+				</EditorButton>
+				<span class="text-sm text-gray-10">New 3D scene</span>
+			</div>
+
+			<p class="text-xs text-gray-10">
+				Lay a chain of camera moves over the whole video
+			</p>
+
+			<Field name="Style" icon={<IconLucideRotate3d class="size-4" />}>
+				<div class="grid grid-cols-3 gap-2">
+					<For each={CAMERA3D_SCENES}>
+						{(item) => (
+							<Camera3DSceneCard
+								scene={item}
+								shotCount={shots()}
+								selected={item.id === scene().id}
+								onClick={() => updateSetup({ sceneId: item.id })}
+							/>
+						)}
+					</For>
+				</div>
+			</Field>
+
+			<Field name="How many shots?">
+				<div class="flex flex-col gap-2">
+					<div class="flex flex-row gap-1 p-1 rounded-lg bg-gray-3">
+						<For each={scene().shots.map((_, index) => index + 1)}>
+							{(count) => {
+								const tooShort = () => count > maxShots();
+								return (
+									// The title lives on the wrapper: a disabled button never
+									// hovers, so it would never show its own tooltip.
+									<div
+										class="flex-1"
+										title={tooShort() ? "Video too short" : undefined}
+									>
+										<button
+											type="button"
+											disabled={tooShort()}
+											onClick={() => updateSetup({ shots: count })}
+											class={cx(
+												"py-1 w-full text-xs font-medium rounded-md transition-colors outline-hidden",
+												shots() === count
+													? "bg-gray-1 dark:bg-gray-5 text-gray-12"
+													: "text-gray-11 hover:text-gray-12",
+												tooShort() && "opacity-40 cursor-not-allowed",
+											)}
+										>
+											{count}
+										</button>
+									</div>
+								);
+							}}
+						</For>
+					</div>
+					<p class="text-xs text-gray-10">
+						Shots split the video into separate camera moves.
+					</p>
+				</div>
+			</Field>
+
+			<div class="flex flex-row gap-2 items-center">
+				<Button
+					variant="primary"
+					size="md"
+					disabled={totalDuration() <= 0}
+					onClick={() => projectActions.addCamera3DScene(scene().id, shots())}
+				>
+					Add scene
+				</Button>
+				<Button variant="gray" size="md" onClick={() => props.onClose()}>
+					Cancel
+				</Button>
+			</div>
+		</div>
+	);
+}
+
+function Camera3DSegmentConfig(props: {
+	segmentIndex: number;
+	segment: Camera3DSegment;
+}) {
+	const { setProject, setEditorState, projectActions } = useEditorContext();
+
+	const updateSegment = (fn: (segment: Camera3DSegment) => void) => {
+		setProject(
+			"timeline",
+			"camera3dSegments",
+			produce((segments) => {
+				const target = segments?.[props.segmentIndex];
+				if (!target) return;
+				fn(target);
+			}),
+		);
+	};
+
+	// A 3D segment is one move: the pose it opens on and the pose it lands on.
+	// Everything in this panel reads and writes that pair, and the per-property
+	// keyframe tracks underneath are only how the renderer is fed.
+	const startPose = () => getStartPose(props.segment);
+	const endPose = () => getEndPose(props.segment);
+	const isStill = () => camera3DPosesEqual(startPose(), endPose());
+
+	// Which of the two poses the Camera sliders are pointed at.
+	const [editingEnd, setEditingEnd] = createSignal(false);
+	const selectedPose = () => (editingEnd() ? endPose() : startPose());
+
+	// Selecting another segment reuses this panel, so the card selection has to
+	// fall back to Start rather than carry over.
+	createEffect(
+		on(
+			() => props.segmentIndex,
+			() => setEditingEnd(false),
+			{ defer: true },
+		),
+	);
+
+	// Parking the playhead on the pose being edited is what makes the canvas
+	// show it. The end pose is sampled a hair inside the segment so the playhead
+	// stays on this segment instead of falling into the next one.
+	const seekToPose = (end: boolean) => {
+		const time = end
+			? Math.max(props.segment.end - 0.01, props.segment.start)
+			: props.segment.start;
+		batch(() => {
+			setEditorState("playbackTime", time);
+			setEditorState("previewTime", null);
+		});
+	};
+
+	const selectPose = (end: boolean) =>
+		batch(() => {
+			setEditingEnd(end);
+			seekToPose(end);
+		});
+
+	const writeMotion = (
+		start: Camera3DProperties,
+		end: Camera3DProperties,
+		easing = getMotionEasing(props.segment),
+	) => updateSegment((segment) => setMotion(segment, start, end, easing));
+
+	// A camera edit on a still shot moves both ends, so dialling in a hold never
+	// turns into an unrequested move. Once the shot moves, each card owns its
+	// own pose.
+	const writeSelectedPose = (pose: Camera3DProperties) => {
+		if (isStill()) writeMotion(pose, pose);
+		else if (editingEnd()) writeMotion(startPose(), pose);
+		else writeMotion(pose, endPose());
+	};
+
+	const setPoseProperty = (key: Camera3DPropertyKey, value: number) =>
+		writeSelectedPose({ ...selectedPose(), [key]: value });
+
+	const swapPoses = () => {
+		const start = startPose();
+		writeMotion(endPose(), start);
+	};
+
+	const flipSegment = (axis: Camera3DFlipAxis) =>
+		updateSegment((segment) => flipCamera3DSegment(segment, axis));
+
+	const makeStill = () => {
+		const start = startPose();
+		writeMotion(start, start);
+	};
+
+	const resetCamera = () => writeSelectedPose({ ...CAMERA3D_RESET_POSE });
+
+	// The shot's identity is the pose it opens on, so the ring stays put while
+	// the end pose is being edited.
+	const activeAnglePresetId = () => matchAnglePreset(startPose());
+
+	const [hoveredTemplate, setHoveredTemplate] = createSignal<string | null>(
+		null,
+	);
+
+	// Templates own the whole camera animation: the existing move is replaced
+	// and the playhead returns to the start so the result plays from its
+	// first pose.
+	const applyTemplate = (template: Camera3DMotionTemplate) => {
+		batch(() => {
+			updateSegment((segment) => {
+				applyMotionTemplate(segment, template);
+			});
+			setEditingEnd(false);
+			setEditorState("playbackTime", props.segment.start);
+			setEditorState("previewTime", null);
+		});
+	};
+
+	// Angle presets are moving shots too, exactly like the motion grid: the
+	// shot opens on the named pose and drifts.
+	const applyAnglePreset = (preset: Camera3DAnglePreset) =>
+		applyTemplate(anglePresetMotion(preset));
+
+	// A scene replaces this one segment with its whole chain of shots, so the
+	// panel hands off to the project action that owns the splice.
+	const applyScene = (scene: Camera3DScene) =>
+		projectActions.applyCamera3DScene(props.segmentIndex, scene.id);
+
+	const motionEasing = () => getMotionEasing(props.segment);
+
+	const blur = () => props.segment.blur;
+
+	const blurSliders = () => {
+		const mode = blur().mode;
+		return mode === "none" ? [] : CAMERA3D_BLUR_SLIDERS[mode];
+	};
+
+	// Blur is on by default now, so the closed section still has to say so.
+	const blurSummary = () => {
+		const mode = blur().mode;
+		if (mode === "none") return "Off";
+		const label =
+			CAMERA3D_BLUR_MODE_OPTIONS.find((option) => option.value === mode)
+				?.label ?? mode;
+		return `${label} ${Math.round(blur().strength)}`;
+	};
+
+	// Blur is segment-level and static: it is never part of the move.
+	const setBlurValue = (key: Camera3DBlurScalarKey, value: number) =>
+		updateSegment((segment) => {
+			segment.blur[key] = value;
+		});
+
+	const setBlurMode = (mode: Camera3DBlurMode) => {
+		if (mode === blur().mode) return;
+		updateSegment((segment) => {
+			segment.blur.mode = mode;
+			const seed = CAMERA3D_BLUR_MODE_SEEDS[mode];
+			for (const key of Object.keys(seed) as Camera3DBlurScalarKey[]) {
+				const value = seed[key];
+				if (value !== undefined) segment.blur[key] = value;
+			}
+		});
+	};
+
+	const setBokeh = (enabled: boolean) => {
+		updateSegment((segment) => {
+			segment.blur.bokeh = enabled;
+			if (!enabled) return;
+			// The bokeh kernel tops out at 20, so pull the strength down with the
+			// slider's new ceiling.
+			segment.blur.strength = Math.min(
+				segment.blur.strength,
+				CAMERA3D_BOKEH_MAX_STRENGTH,
+			);
+		});
+	};
+
+	const resetBlur = () => {
+		updateSegment((segment) => {
+			segment.blur = defaultCamera3DBlur();
+		});
+	};
+
+	// Section state is panel-local: it is how this user is reading the panel
+	// right now, not something the project should remember.
+	const [cameraOpen, setCameraOpen] = createSignal(false);
+	const [blurOpen, setBlurOpen] = createSignal(false);
+	const [advancedOpen, setAdvancedOpen] = createSignal(false);
+
+	const poseCard = (label: string, end: boolean) => (
+		<button
+			type="button"
+			onClick={() => selectPose(end)}
+			class={cx(
+				"flex flex-col flex-1 gap-1 p-1 rounded-lg border transition-colors outline-hidden",
+				editingEnd() === end
+					? "border-blue-9 ring-1 ring-blue-9"
+					: "border-gray-4 hover:border-gray-7",
+			)}
+		>
+			{/* No transition here: these cards track the sliders live. */}
+			<Camera3DPosePreview
+				pose={end ? endPose() : startPose()}
+				height={CAMERA3D_POSE_PREVIEW_HEIGHT}
+			/>
+			<span class="text-[10px] leading-tight text-center text-gray-11">
+				{label}
+			</span>
+		</button>
+	);
+
+	return (
+		<div class="space-y-4">
+			<Field name="Templates" icon={<IconLucideRotate3d class="size-4" />}>
+				<div class="flex flex-col gap-3">
+					{/* Scenes lead: one click lays a whole chained sequence over this
+					    segment's range, where the rows below author a single shot. */}
+					<div class="grid grid-cols-3 gap-2">
+						<For each={CAMERA3D_SCENES}>
+							{(scene) => (
+								<Camera3DSceneCard
+									scene={scene}
+									onClick={() => applyScene(scene)}
+								/>
+							)}
+						</For>
+					</div>
+					<div class="grid grid-cols-5 gap-1.5">
+						<For each={ANGLE_PRESETS}>
+							{(preset) => (
+								<button
+									type="button"
+									onClick={() => applyAnglePreset(preset)}
+									onMouseEnter={() => setHoveredTemplate(`angle-${preset.id}`)}
+									onMouseLeave={() =>
+										setHoveredTemplate((current) =>
+											current === `angle-${preset.id}` ? null : current,
+										)
+									}
+									class={cx(
+										"flex flex-col gap-1 p-1 rounded-lg border transition-colors outline-hidden",
+										activeAnglePresetId() === preset.id
+											? "border-blue-9 ring-1 ring-blue-9"
+											: "border-gray-4 hover:border-gray-7",
+									)}
+								>
+									<Camera3DPosePreview
+										animate
+										pose={
+											hoveredTemplate() === `angle-${preset.id}`
+												? anglePresetMotion(preset).to
+												: anglePresetPose(preset)
+										}
+										height={CAMERA3D_ANGLE_PREVIEW_HEIGHT}
+									/>
+									<span class="text-[10px] leading-tight text-center text-gray-11">
+										{preset.name}
+									</span>
+								</button>
+							)}
+						</For>
+					</div>
+					<div class="grid grid-cols-4 gap-2">
+						<For each={MOTION_TEMPLATES}>
+							{(template) => (
+								<button
+									type="button"
+									onClick={() => applyTemplate(template)}
+									onMouseEnter={() => setHoveredTemplate(template.id)}
+									onMouseLeave={() =>
+										setHoveredTemplate((current) =>
+											current === template.id ? null : current,
+										)
+									}
+									class="flex flex-col gap-1 p-1 rounded-lg border transition-colors outline-hidden border-gray-4 hover:border-gray-7"
+								>
+									<Camera3DPosePreview
+										animate
+										pose={
+											hoveredTemplate() === template.id
+												? template.to
+												: template.from
+										}
+										height={CAMERA3D_TEMPLATE_PREVIEW_HEIGHT}
+									/>
+									<span class="text-[10px] leading-tight text-center text-gray-11">
+										{template.name}
+									</span>
+								</button>
+							)}
+						</For>
+					</div>
+				</div>
+			</Field>
+			<Field name="Motion" icon={<IconLucideMoveRight class="size-4" />}>
+				<div class="flex flex-col gap-2">
+					<div class="flex flex-row gap-2 items-center">
+						{poseCard("Start", false)}
+						<EditorButton
+							onClick={swapPoses}
+							tooltipText="Swap start and end"
+							leftIcon={<IconLucideArrowLeftRight class="size-3.5" />}
+						/>
+						{poseCard("End", true)}
+					</div>
+					<div class="flex flex-row gap-1 items-center">
+						<EditorButton
+							onClick={() => flipSegment("horizontal")}
+							tooltipText="Flip horizontal"
+							leftIcon={<IconLucideFlipHorizontal2 class="size-3.5" />}
+						/>
+						<EditorButton
+							onClick={() => flipSegment("vertical")}
+							tooltipText="Flip vertical"
+							leftIcon={<IconLucideFlipVertical2 class="size-3.5" />}
+						/>
+						<Show
+							when={!isStill()}
+							fallback={
+								<p class="text-[11px] text-gray-10">
+									Pick a template or edit the end pose to add motion
+								</p>
+							}
+						>
+							<button
+								type="button"
+								onClick={makeStill}
+								class="self-start text-[11px] transition-colors outline-hidden text-gray-11 hover:text-gray-12"
+							>
+								Still shot
+							</button>
+						</Show>
+					</div>
+				</div>
+			</Field>
+			<Camera3DSection
+				name="Camera"
+				icon={<IconLucideVideo class="size-4" />}
+				summary={editingEnd() ? "End pose" : "Start pose"}
+				open={cameraOpen()}
+				onOpenChange={setCameraOpen}
+			>
+				<div class="flex flex-col gap-3">
+					<For each={CAMERA3D_SLIDERS}>
+						{(slider) => (
+							<div class="flex flex-col gap-1">
+								<span class="flex flex-row gap-1.5 items-center text-xs text-gray-11">
+									{camera3dSliderIcon(slider.key)}
+									{slider.label}
+								</span>
+								<Slider
+									value={[selectedPose()[slider.key]]}
+									onChange={(v) => setPoseProperty(slider.key, v[0])}
+									minValue={CAMERA3D_LIMITS[slider.key].min}
+									maxValue={CAMERA3D_LIMITS[slider.key].max}
+									step={CAMERA3D_LIMITS[slider.key].step}
+									formatTooltip={slider.unit}
+								/>
+							</div>
+						)}
+					</For>
+					<EditorButton
+						leftIcon={<IconLucideRotateCcw />}
+						onClick={resetCamera}
+					>
+						Reset camera
+					</EditorButton>
+				</div>
+			</Camera3DSection>
+			<Camera3DSection
+				name="Blur"
+				icon={<IconLucideWind class="size-4" />}
+				summary={blurSummary()}
+				open={blurOpen()}
+				onOpenChange={setBlurOpen}
+			>
+				<div class="flex flex-col gap-3">
+					<Subfield name="Mode">
+						<div class="w-40">
+							<KSelect<{ value: Camera3DBlurMode; label: string }>
+								options={CAMERA3D_BLUR_MODE_OPTIONS}
+								optionValue="value"
+								optionTextValue="label"
+								value={CAMERA3D_BLUR_MODE_OPTIONS.find(
+									(option) => option.value === blur().mode,
+								)}
+								onChange={(option) => {
+									if (option) setBlurMode(option.value);
+								}}
+								disallowEmptySelection
+								itemComponent={(itemProps) => (
+									<MenuItem<typeof KSelect.Item>
+										as={KSelect.Item}
+										item={itemProps.item}
+									>
+										<KSelect.ItemLabel class="flex-1">
+											{itemProps.item.rawValue.label}
+										</KSelect.ItemLabel>
+									</MenuItem>
+								)}
+							>
+								<KSelect.Trigger class="flex flex-row gap-2 items-center px-2 w-full h-8 rounded-lg transition-colors bg-gray-3 disabled:text-gray-11">
+									<KSelect.Value<{
+										value: Camera3DBlurMode;
+										label: string;
+									}> class="flex-1 text-sm text-left truncate text-(--gray-500) font-normal">
+										{(state) => <span>{state.selectedOption().label}</span>}
+									</KSelect.Value>
+									<KSelect.Icon<ValidComponent>
+										as={(iconProps) => (
+											<IconCapChevronDown
+												{...iconProps}
+												class="size-4 shrink-0 transform transition-transform data-expanded:rotate-180 text-(--gray-500)"
+											/>
+										)}
+									/>
+								</KSelect.Trigger>
+								<KSelect.Portal>
+									<PopperContent<typeof KSelect.Content>
+										as={KSelect.Content}
+										class={cx(topSlideAnimateClasses, "z-50")}
+									>
+										<MenuItemList<typeof KSelect.Listbox>
+											class="overflow-y-auto max-h-32"
+											as={KSelect.Listbox}
+										/>
+									</PopperContent>
+								</KSelect.Portal>
+							</KSelect>
+						</div>
+					</Subfield>
+					<Show
+						when={blur().mode !== "none"}
+						fallback={
+							<p class="text-xs text-gray-11">
+								Pick a mode to blur everything outside the focus area.
+							</p>
+						}
+					>
+						<For each={blurSliders()}>
+							{(slider) => {
+								const limit = () => camera3dBlurLimit(slider.key, blur());
+								return (
+									<div class="flex flex-col gap-1">
+										<span class="text-xs text-gray-11">{slider.label}</span>
+										<Slider
+											value={[blur()[slider.key]]}
+											onChange={(v) => setBlurValue(slider.key, v[0])}
+											minValue={limit().min}
+											maxValue={limit().max}
+											step={limit().step}
+											formatTooltip={slider.unit}
+										/>
+									</div>
+								);
+							}}
+						</For>
+						<Subfield name="Bokeh">
+							<Toggle checked={blur().bokeh} onChange={setBokeh} />
+						</Subfield>
+						<EditorButton
+							leftIcon={<IconLucideRotateCcw />}
+							onClick={resetBlur}
+						>
+							Turn blur off
+						</EditorButton>
+					</Show>
+				</div>
+			</Camera3DSection>
+			<Camera3DSection
+				name="Advanced"
+				icon={<IconLucideTimer class="size-4" />}
+				open={advancedOpen()}
+				onOpenChange={setAdvancedOpen}
+			>
+				<div class="flex flex-col gap-3">
+					<Subfield name="Motion style">
+						<div class="w-40">
+							<KSelect<Camera3DMotionEasing>
+								options={MOTION_EASINGS}
+								optionValue="id"
+								optionTextValue="label"
+								value={motionEasing()}
+								onChange={(option) => {
+									if (option) writeMotion(startPose(), endPose(), option);
+								}}
+								// A still shot has no span to shape, and nowhere to store a
+								// curve, so the picker would silently snap back.
+								disabled={isStill()}
+								disallowEmptySelection
+								itemComponent={(itemProps) => (
+									<MenuItem<typeof KSelect.Item>
+										as={KSelect.Item}
+										item={itemProps.item}
+									>
+										<KSelect.ItemLabel class="flex-1">
+											{itemProps.item.rawValue.label}
+										</KSelect.ItemLabel>
+									</MenuItem>
+								)}
+							>
+								<KSelect.Trigger class="flex flex-row gap-2 items-center px-2 w-full h-8 rounded-lg transition-colors bg-gray-3 disabled:text-gray-11">
+									<KSelect.Value<Camera3DMotionEasing> class="flex-1 text-sm text-left truncate text-(--gray-500) font-normal">
+										{(state) => <span>{state.selectedOption().label}</span>}
+									</KSelect.Value>
+									<KSelect.Icon<ValidComponent>
+										as={(iconProps) => (
+											<IconCapChevronDown
+												{...iconProps}
+												class="size-4 shrink-0 transform transition-transform data-expanded:rotate-180 text-(--gray-500)"
+											/>
+										)}
+									/>
+								</KSelect.Trigger>
+								<KSelect.Portal>
+									<PopperContent<typeof KSelect.Content>
+										as={KSelect.Content}
+										class={cx(topSlideAnimateClasses, "z-50")}
+									>
+										<MenuItemList<typeof KSelect.Listbox>
+											class="overflow-y-auto max-h-32"
+											as={KSelect.Listbox}
+										/>
+									</PopperContent>
+								</KSelect.Portal>
+							</KSelect>
+						</div>
+					</Subfield>
+					<div class="flex flex-col gap-2">
+						<Camera3DTransitionInput
+							label="Ease in"
+							value={props.segment.transitionIn}
+							onChange={(value) =>
+								updateSegment((segment) => {
+									segment.transitionIn = value;
+								})
+							}
+						/>
+						<Camera3DTransitionInput
+							label="Ease out"
+							value={props.segment.transitionOut}
+							onChange={(value) =>
+								updateSegment((segment) => {
+									segment.transitionOut = value;
+								})
+							}
+						/>
+					</div>
+				</div>
+			</Camera3DSection>
+		</div>
+	);
+}
+
+// Maps a zoom segment's start (held-output time on the edited timeline) to
+// the recording-segment file and the time within it whose frame is on screen
+// at that moment. Split/trimmed timelines mean neither can be read off the
+// zoom segment directly.
+function zoomPreviewSource(
+	timeline:
+		| {
+				segments: TimelineSegment[];
+				transitions?: ClipTransition[];
+				textSegments?: TextSegment[];
+		  }
+		| null
+		| undefined,
+	editedTime: number,
+): { recordingSegment: number; sourceTime: number } {
+	const gapless =
+		editedTime -
+		heldTimeBefore(holdWindows(timeline?.textSegments), editedTime);
+	return (
+		clipSourceTimeAt(
+			timeline?.segments ?? [],
+			timeline?.transitions ?? [],
+			gapless,
+		) ?? { recordingSegment: 0, sourceTime: gapless }
+	);
+}
+
+// The mapping memos return fresh objects; compare by value so unrelated
+// timeline edits don't restart the preview <video>.
+const zoomPreviewSourceEquals = (
+	a: { recordingSegment: number; sourceTime: number },
+	b: { recordingSegment: number; sourceTime: number },
+) => a.recordingSegment === b.recordingSegment && a.sourceTime === b.sourceTime;
+
 function ZoomSegmentPreview(props: {
 	segmentIndex: number;
 	segment: ZoomSegment;
 }) {
 	const { project, editorInstance } = useEditorContext();
 
-	const start = createMemo(() => props.segment.start);
-
-	const clipSegment = createMemo(() => {
-		const st = start();
-		return project.timeline?.segments.find((s) => s.start <= st && s.end > st);
-	});
-
-	const relativeTime = createMemo(() => {
-		const st = start();
-		const segment = clipSegment();
-		if (!segment) return 0;
-		return Math.max(0, st - segment.start);
-	});
+	const source = createMemo(
+		() => zoomPreviewSource(project.timeline, props.segment.start),
+		undefined,
+		{ equals: zoomPreviewSourceEquals },
+	);
 
 	const video = document.createElement("video");
 	createEffect(() => {
-		// TODO: make this not hardcoded
 		const path = convertFileSrc(
 			`${editorInstance.path}/content/segments/segment-${
-				clipSegment()?.recordingSegment ?? 0
+				source().recordingSegment
 			}/display.mp4`,
 		);
 		video.src = path;
@@ -4132,8 +5516,7 @@ function ZoomSegmentPreview(props: {
 	});
 
 	createEffect(() => {
-		const t = relativeTime();
-		if (t === undefined) return;
+		const t = source().sourceTime;
 
 		if (video.readyState >= 2) {
 			video.currentTime = t;
@@ -4155,7 +5538,10 @@ function ZoomSegmentPreview(props: {
 		ctx.imageSmoothingEnabled = false;
 		ctx.clearRect(0, 0, canvasRef.width, canvasRef.height);
 
-		const raw = editorInstance.recordings.segments[0].display;
+		const raw = (
+			editorInstance.recordings.segments[source().recordingSegment] ??
+			editorInstance.recordings.segments[0]
+		).display;
 		const croppedPosition = project.background.crop?.position || { x: 0, y: 0 };
 		const croppedSize = project.background.crop?.size || {
 			x: raw.width,
@@ -4286,6 +5672,17 @@ function ZoomSegmentConfig(props: {
 							<div class="flex-1 bg-gray-3" />
 						</KTabs.Indicator>
 					</KTabs.List>
+					<div class="space-y-3">
+						<Show when={!generalSettings.data?.custom_cursor_capture2}>
+							<p class="text-xs text-gray-11">
+								Auto mode needs cursor capture. Enable "Custom cursor capture
+								(Studio)" in Settings → General.
+							</p>
+						</Show>
+						<ZoomModeHelper
+							mode={props.segment.mode === "auto" ? "auto" : "manual"}
+						/>
+					</div>
 					<KTabs.Content value="manual" tabIndex="">
 						<Show
 							when={(() => {
@@ -4296,39 +5693,30 @@ function ZoomSegmentConfig(props: {
 							})()}
 						>
 							{(mode) => {
-								const start = createMemo<number>((prev) => {
-									if (projectHistory.isPaused()) return prev;
+								// Frozen while history is paused so drags don't thrash the
+								// <video> seek.
+								const source = createMemo<{
+									recordingSegment: number;
+									sourceTime: number;
+								}>(
+									(prev) => {
+										if (projectHistory.isPaused()) return prev;
 
-									return props.segment.start;
-								}, 0);
-
-								const segmentIndex = createMemo<number>((prev) => {
-									if (projectHistory.isPaused()) return prev;
-
-									const st = start();
-									const i = project.timeline?.segments.findIndex(
-										(s) => s.start <= st && s.end > st,
-									);
-									if (i === undefined || i === -1) return 0;
-									return i;
-								}, 0);
-
-								// Calculate the time relative to the video segment
-								const relativeTime = createMemo(() => {
-									const st = start();
-									const segment = project.timeline?.segments[segmentIndex()];
-									if (!segment) return 0;
-									// The time within the actual video file
-									return Math.max(0, st - segment.start);
-								});
+										return zoomPreviewSource(
+											project.timeline,
+											props.segment.start,
+										);
+									},
+									{ recordingSegment: 0, sourceTime: 0 },
+									{ equals: zoomPreviewSourceEquals },
+								);
 
 								const video = document.createElement("video");
 								createEffect(() => {
 									const path = convertFileSrc(
-										// TODO: this shouldn't be so hardcoded
-										`${
-											editorInstance.path
-										}/content/segments/segment-${segmentIndex()}/display.mp4`,
+										`${editorInstance.path}/content/segments/segment-${
+											source().recordingSegment
+										}/display.mp4`,
 									);
 									video.src = path;
 									video.preload = "auto";
@@ -4337,8 +5725,7 @@ function ZoomSegmentConfig(props: {
 								});
 
 								createEffect(() => {
-									const t = relativeTime();
-									if (t === undefined) return;
+									const t = source().sourceTime;
 
 									// Ensure video is ready before seeking
 									if (video.readyState >= 2) {
@@ -4411,7 +5798,11 @@ function ZoomSegmentConfig(props: {
 								const [ref, setRef] = createSignal<HTMLDivElement>();
 								const bounds = createElementBounds(ref);
 								const rawSize = () => {
-									const raw = editorInstance.recordings.segments[0].display;
+									const raw = (
+										editorInstance.recordings.segments[
+											source().recordingSegment
+										] ?? editorInstance.recordings.segments[0]
+									).display;
 									return { x: raw.width, y: raw.height };
 								};
 
@@ -4513,192 +5904,303 @@ function ZoomSegmentConfig(props: {
 	);
 }
 
-function ClipSegmentConfig(props: {
-	segmentIndex: number;
-	segment: TimelineSegment;
+// Bulk editor shown when multiple zoom segments are selected: one set of
+// controls that writes to every selected segment, with "Mixed" badges when
+// the selected segments' values differ.
+function ZoomMultiSegmentConfig(props: {
+	segments: { index: number; segment: ZoomSegment }[];
 }) {
-	const { setProject, setEditorState, project, projectActions, meta } =
-		useEditorContext();
+	const generalSettings = generalSettingsStore.createQuery();
+	const { setProject, setEditorState } = useEditorContext();
 
-	// Get current clip configuration
-	const clipConfig = () =>
-		project.clips?.find((c) => c.index === props.segmentIndex);
-	const offsets = () => clipConfig()?.offsets || {};
-	const offsetsAutoCalculated = () =>
-		clipConfig()?.offsetsAutoCalculated === true;
+	const amounts = () => props.segments.map((s) => s.segment.amount);
+	const sharedAmount = () => {
+		const [first, ...rest] = amounts();
+		if (first === undefined) return null;
+		return rest.every((a) => a === first) ? first : null;
+	};
+	const averageAmount = () => {
+		const values = amounts();
+		if (values.length === 0) return 1;
+		return values.reduce((sum, v) => sum + v, 0) / values.length;
+	};
 
-	function setOffset(type: keyof ClipOffsets, offset: number) {
-		if (Number.isNaN(offset)) return;
+	const sharedMode = (): "auto" | "manual" | "mixed" => {
+		const modes = props.segments.map((s) =>
+			s.segment.mode === "auto" ? ("auto" as const) : ("manual" as const),
+		);
+		const [first, ...rest] = modes;
+		if (first === undefined) return "mixed";
+		return rest.every((m) => m === first) ? first : "mixed";
+	};
+
+	const manualPositions = () =>
+		props.segments.map((s) =>
+			s.segment.mode === "auto" ? { x: 0.5, y: 0.5 } : s.segment.mode.manual,
+		);
+
+	const manualPositionsMixed = () => {
+		const [first, ...rest] = manualPositions();
+		if (!first) return false;
+		return rest.some((p) => p.x !== first.x || p.y !== first.y);
+	};
+
+	const averageManualPosition = () => {
+		const positions = manualPositions();
+		if (positions.length === 0) return { x: 0.5, y: 0.5 };
+		return {
+			x: positions.reduce((sum, p) => sum + p.x, 0) / positions.length,
+			y: positions.reduce((sum, p) => sum + p.y, 0) / positions.length,
+		};
+	};
+
+	const setAllAmounts = (amount: number) =>
+		batch(() => {
+			for (const { index } of props.segments)
+				setProject("timeline", "zoomSegments", index, "amount", amount);
+		});
+
+	// Switching to manual keeps each segment's existing focal point; only
+	// segments coming from auto get the centered default.
+	const setAllModes = (mode: "auto" | "manual") =>
+		batch(() => {
+			for (const { index, segment } of props.segments) {
+				if (mode === "auto")
+					setProject("timeline", "zoomSegments", index, "mode", "auto");
+				else if (segment.mode === "auto")
+					setProject("timeline", "zoomSegments", index, "mode", {
+						manual: { x: 0.5, y: 0.5 },
+					});
+			}
+		});
+
+	const setAllManualPositions = (pos: XY<number>) =>
+		batch(() => {
+			for (const { index } of props.segments)
+				setProject("timeline", "zoomSegments", index, "mode", {
+					manual: { ...pos },
+				});
+		});
+
+	const removeFromSelection = (segmentIndex: number) => {
+		const remaining = props.segments
+			.map((s) => s.index)
+			.filter((index) => index !== segmentIndex);
+		setEditorState(
+			"timeline",
+			"selection",
+			remaining.length > 0 ? { type: "zoom", indices: remaining } : null,
+		);
+	};
+
+	const modeButtonClass =
+		"flex-1 py-2.5 rounded-[0.6rem] text-gray-11 transition-colors duration-100 outline-hidden data-[selected='true']:bg-gray-3 data-[selected='true']:text-gray-12 not-data-[selected='true']:hover:text-gray-12 disabled:opacity-40 disabled:cursor-not-allowed";
+
+	return (
+		<div class="space-y-4">
+			<div class="flex flex-col gap-6 p-4 rounded-lg border border-gray-200">
+				<Field
+					name="Zoom Amount"
+					icon={<IconLucideSearch />}
+					value={
+						<Show when={sharedAmount() === null}>
+							<span class="text-[10px] px-1.5 py-0.5 bg-gray-3 rounded-full text-gray-11 font-medium">
+								Mixed
+							</span>
+						</Show>
+					}
+				>
+					<Slider
+						value={[sharedAmount() ?? averageAmount()]}
+						onChange={(v) => setAllAmounts(v[0])}
+						minValue={1}
+						maxValue={4.5}
+						step={0.001}
+						formatTooltip="x"
+					/>
+				</Field>
+				<Field
+					name="Zoom Mode"
+					icon={<IconCapSettings />}
+					value={
+						<Show when={sharedMode() === "mixed"}>
+							<span class="text-[10px] px-1.5 py-0.5 bg-gray-3 rounded-full text-gray-11 font-medium">
+								Mixed
+							</span>
+						</Show>
+					}
+				>
+					<div class="flex flex-row items-center p-px rounded-lg border">
+						<button
+							type="button"
+							disabled={!generalSettings.data?.custom_cursor_capture2}
+							data-selected={sharedMode() === "auto"}
+							onClick={() => setAllModes("auto")}
+							class={modeButtonClass}
+						>
+							Auto
+						</button>
+						<button
+							type="button"
+							data-selected={sharedMode() === "manual"}
+							onClick={() => setAllModes("manual")}
+							class={modeButtonClass}
+						>
+							Manual
+						</button>
+					</div>
+					<Show when={!generalSettings.data?.custom_cursor_capture2}>
+						<p class="text-xs text-gray-11">
+							Auto mode needs cursor capture. Enable "Custom cursor capture
+							(Studio)" in Settings → General.
+						</p>
+					</Show>
+					<Show
+						when={(() => {
+							const mode = sharedMode();
+							return mode === "mixed" ? null : mode;
+						})()}
+					>
+						{(mode) => <ZoomModeHelper mode={mode()} />}
+					</Show>
+					<Show when={sharedMode() === "manual"}>
+						<div class="space-y-1.5">
+							<PositionPad
+								value={averageManualPosition}
+								onChange={setAllManualPositions}
+							/>
+							<Show when={manualPositionsMixed()}>
+								<p class="text-xs text-gray-10">
+									Segments zoom into different spots. Drag to move them all to
+									the same one.
+								</p>
+							</Show>
+						</div>
+					</Show>
+				</Field>
+			</div>
+			<div class="grid grid-cols-3 gap-4">
+				<Index each={[...props.segments].sort((a, b) => a.index - b.index)}>
+					{(item) => (
+						<div class="relative p-2.5 rounded-lg border border-gray-4 bg-gray-3 group">
+							<button
+								type="button"
+								class="hidden absolute top-1.5 right-1.5 z-10 justify-center items-center rounded-full transition-colors group-hover:flex bg-gray-5 hover:bg-gray-6 text-gray-11 hover:text-gray-12 size-5"
+								aria-label="Remove from selection"
+								onClick={() => removeFromSelection(item().index)}
+							>
+								<IconLucideX class="size-3" />
+							</button>
+							<ZoomSegmentPreview
+								segment={item().segment}
+								segmentIndex={item().index}
+							/>
+						</div>
+					)}
+				</Index>
+			</div>
+		</div>
+	);
+}
+
+// A/V sync offsets are per recording segment (project.clips is keyed by
+// recording segment index), so they live with the audio settings rather
+// than any one timeline segment.
+function SyncOffsetsConfig() {
+	const { project, setProject, editorInstance, meta } = useEditorContext();
+
+	const clipConfig = (recordingIndex: number) =>
+		project.clips?.find((c) => c.index === recordingIndex);
+
+	const hasAnySource = () =>
+		meta().hasSystemAudio || meta().hasMicrophone || meta().hasCamera;
+
+	function setOffset(
+		recordingIndex: number,
+		type: keyof ClipOffsets,
+		offsetMs: number,
+	) {
+		if (Number.isNaN(offsetMs)) return;
 
 		setProject(
 			produce((proj) => {
 				if (!proj.clips) proj.clips = [];
-				const clips = proj.clips;
-				let clip = clips.find(
-					(clip) => clip.index === (props.segment.recordingSegment ?? 0),
-				);
+				let clip = proj.clips.find((c) => c.index === recordingIndex);
 				if (!clip) {
-					clip = { index: 0, offsets: {} };
-					clips.push(clip);
+					clip = { index: recordingIndex, offsets: {} };
+					proj.clips.push(clip);
 				}
 
-				clip.offsets[type] = offset / 1000;
+				clip.offsets[type] = offsetMs / 1000;
 				clip.offsetsAutoCalculated = false;
 			}),
 		);
 	}
 
-	function setSpeedAudioMode(value: string) {
-		if (
-			value === "mute" ||
-			value === "maintainPitch" ||
-			value === "matchSpeed"
-		) {
-			projectActions.setClipSegmentSpeedAudioMode(
-				props.segmentIndex,
-				value satisfies ClipSpeedAudioMode,
-			);
-		}
-	}
-
 	return (
-		<>
-			<div class="flex flex-row justify-between items-center">
-				<div class="flex gap-2 items-center">
-					<EditorButton
-						onClick={() => setEditorState("timeline", "selection", null)}
-						leftIcon={<IconLucideCheck />}
-					>
-						Done
-					</EditorButton>
-				</div>
-				<EditorButton
-					variant="danger"
-					onClick={() => {
-						projectActions.deleteClipSegment(props.segmentIndex);
-					}}
-					disabled={(project.timeline?.segments.length ?? 0) < 2}
-					leftIcon={<IconCapTrash />}
-				>
-					Delete
-				</EditorButton>
-			</div>
-
-			<div class="space-y-0.5">
-				<h3 class="font-medium text-gray-12">Segment Settings</h3>
-				<p class="text-gray-11">
-					These settings apply to only the selected segment
-				</p>
-			</div>
-
-			<Field name="Speed" icon={<IconLucideFastForward class="size-4" />}>
-				<KRadioGroup
-					class="flex flex-row gap-1.5 -mt-1"
-					value={props.segment.timescale.toString()}
-					onChange={(v) => {
-						projectActions.setClipSegmentTimescale(
-							props.segmentIndex,
-							parseFloat(v),
-						);
-					}}
-				>
-					<For each={[0.25, 0.5, 1, 1.5, 2, 4, 8]}>
-						{(mult) => (
-							<KRadioGroup.Item value={mult.toString()}>
-								<KRadioGroup.ItemControl class="px-2 py-1 text-gray-11 hover:text-gray-12 bg-gray-1 border border-gray-3 rounded-md data-checked:bg-gray-3 data-checked:border-gray-4 data-checked:text-gray-12">
-									{mult}x
-								</KRadioGroup.ItemControl>
-							</KRadioGroup.Item>
-						)}
-					</For>
-				</KRadioGroup>
-
-				<Show when={props.segment.timescale !== 1}>
-					<div class="space-y-2 pt-2">
-						<p class="text-gray-11">
-							Mute is fastest. Maintain pitch keeps voices natural, while Match
-							speed raises or lowers pitch with playback speed.
-						</p>
-						<KRadioGroup
-							class="grid grid-cols-3 gap-1.5"
-							value={props.segment.speedAudioMode ?? "mute"}
-							onChange={setSpeedAudioMode}
-						>
-							<For
-								each={[
-									{ value: "mute", label: "Mute" },
-									{ value: "maintainPitch", label: "Maintain pitch" },
-									{ value: "matchSpeed", label: "Match speed" },
-								]}
-							>
-								{(option) => (
-									<KRadioGroup.Item value={option.value}>
-										<KRadioGroup.ItemControl class="w-full px-2 py-1.5 text-xs text-gray-11 hover:text-gray-12 bg-gray-1 border border-gray-3 rounded-md data-checked:bg-gray-3 data-checked:border-gray-4 data-checked:text-gray-12">
-											{option.label}
-										</KRadioGroup.ItemControl>
-									</KRadioGroup.Item>
-								)}
-							</For>
-						</KRadioGroup>
-					</div>
-				</Show>
-			</Field>
-
-			<div class="space-y-0.5 pt-2">
-				<h3 class="font-medium text-gray-12">Clip Settings</h3>
-				<p class="text-gray-11">
-					These settings apply to all segments for the current clip
-				</p>
-				<Show when={offsetsAutoCalculated()}>
+		<Show when={hasAnySource()}>
+			<div class="flex flex-col gap-6">
+				<div class="space-y-0.5">
+					<h3 class="font-medium text-gray-12">Sync</h3>
 					<p class="text-gray-11">
-						Cap calculated these offsets automatically to keep audio in sync
-						with the video. Adjust them if anything still sounds off.
+						Fine-tune source offsets if audio or camera drifts out of sync with
+						the screen recording.
 					</p>
-				</Show>
+				</div>
+
+				<For each={editorInstance.recordings.segments}>
+					{(_, index) => (
+						<div class="flex flex-col gap-6">
+							<Show when={editorInstance.recordings.segments.length > 1}>
+								<span class="font-medium text-gray-12">Clip {index()}</span>
+							</Show>
+							<Show when={clipConfig(index())?.offsetsAutoCalculated === true}>
+								<p class="text-gray-11">
+									Cap calculated these offsets automatically to keep audio in
+									sync with the video. Adjust them if anything still sounds off.
+								</p>
+							</Show>
+							{meta().hasSystemAudio && (
+								<SourceOffsetField
+									name="System Audio Offset"
+									value={clipConfig(index())?.offsets.system_audio}
+									autoCalculated={
+										clipConfig(index())?.offsetsAutoCalculated === true
+									}
+									onChange={(offset) => {
+										setOffset(index(), "system_audio", offset);
+									}}
+								/>
+							)}
+							{meta().hasMicrophone && (
+								<SourceOffsetField
+									name="Microphone Offset"
+									value={clipConfig(index())?.offsets.mic}
+									autoCalculated={
+										clipConfig(index())?.offsetsAutoCalculated === true
+									}
+									onChange={(offset) => {
+										setOffset(index(), "mic", offset);
+									}}
+								/>
+							)}
+							{meta().hasCamera && (
+								<SourceOffsetField
+									name="Camera Offset"
+									value={clipConfig(index())?.offsets.camera}
+									autoCalculated={
+										clipConfig(index())?.offsetsAutoCalculated === true
+									}
+									onChange={(offset) => {
+										setOffset(index(), "camera", offset);
+									}}
+								/>
+							)}
+						</div>
+					)}
+				</For>
 			</div>
-
-			{meta().hasSystemAudio && (
-				<SourceOffsetField
-					name="System Audio Offset"
-					value={offsets().system_audio}
-					autoCalculated={offsetsAutoCalculated()}
-					onChange={(offset) => {
-						setOffset("system_audio", offset);
-					}}
-				/>
-			)}
-			{meta().hasMicrophone && (
-				<SourceOffsetField
-					name="Microphone Offset"
-					value={offsets().mic}
-					autoCalculated={offsetsAutoCalculated()}
-					onChange={(offset) => {
-						setOffset("mic", offset);
-					}}
-				/>
-			)}
-			{meta().hasCamera && (
-				<SourceOffsetField
-					name="Camera Offset"
-					value={offsets().camera}
-					autoCalculated={offsetsAutoCalculated()}
-					onChange={(offset) => {
-						setOffset("camera", offset);
-					}}
-				/>
-			)}
-
-			{/*<ComingSoonTooltip>
-			<Field name="Hide Cursor" disabled value={<Toggle disabled />} />
-		</ComingSoonTooltip>
-		<ComingSoonTooltip>
-			<Field
-				name="Disable Smooth Cursor Movement"
-				disabled
-				value={<Toggle disabled />}
-			/>
-		</ComingSoonTooltip>*/}
-		</>
+		</Show>
 	);
 }
 

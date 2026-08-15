@@ -162,6 +162,9 @@ export const zhCNMessages = {
 	"settings.autoZoomOnClicks": "点击时自动缩放",
 	"settings.autoZoomOnClicksDescription":
 		"在工作室录制的鼠标点击处自动添加缩放片段。",
+	"settings.defaultZoomAmount": "默认缩放倍率",
+	"settings.defaultZoomAmountDescription":
+		"新建和自动生成的缩放片段所使用的缩放倍率。",
 	"settings.captureKeyboardPresses": "捕获键盘按键",
 	"settings.captureKeyboardPressesDescription":
 		"记录按键，以便在编辑器中添加键盘叠加层。",
@@ -242,6 +245,7 @@ export const zhCNMessages = {
 	"recording.noSystemAudio": "不录制系统音频",
 	"recording.noMatchingCameras": "没有匹配的摄像头",
 	"recording.noMatchingMicrophones": "没有匹配的麦克风",
+	"recording.notConnected": "未连接",
 	"recording.searchCameras": "搜索摄像头",
 	"recording.searchMicrophones": "搜索麦克风",
 	"recording.noWebcam": "不使用摄像头",

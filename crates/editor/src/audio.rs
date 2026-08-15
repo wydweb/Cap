@@ -251,7 +251,9 @@ impl AudioRenderer {
         project: &ProjectConfiguration,
         timeline: &TimelineConfiguration,
     ) -> Option<(usize, Vec<f32>)> {
-        if !timeline.transitions.is_empty() {
+        // Transitions and fullscreen-text holds both need the mapping-driven
+        // path; the accumulation fast path below knows nothing about either.
+        if !timeline.transitions.is_empty() || !timeline.hold_windows().is_empty() {
             return self.render_timeline_transition_frame_raw(samples, project, timeline);
         }
 
@@ -328,7 +330,8 @@ impl AudioRenderer {
                 };
                 let output_end = match mapping {
                     TimelineFrameMapping::Single { output_end, .. }
-                    | TimelineFrameMapping::Transition { output_end, .. } => output_end,
+                    | TimelineFrameMapping::Transition { output_end, .. }
+                    | TimelineFrameMapping::Hold { output_end, .. } => output_end,
                 };
                 let output_end_samples = self.playhead_to_samples(output_end);
                 if output_end_samples > self.elapsed_samples {
@@ -354,6 +357,14 @@ impl AudioRenderer {
                         &mut output,
                     );
                     self.cursor = source_cursor(source, source_samples + chunk_samples);
+                }
+                TimelineFrameMapping::Hold { source, .. } => {
+                    // Recording clock is paused: the chunk stays silent (the
+                    // buffer is zero-filled) and the cursor parks on the
+                    // frozen instant so playback resumes seamlessly. Music
+                    // keeps playing — it mixes in output time on top.
+                    self.cursor =
+                        source_cursor(source, self.playhead_to_samples(source.source_time));
                 }
                 TimelineFrameMapping::Transition {
                     outgoing,
@@ -1941,6 +1952,7 @@ mod tests {
                 caption_segments: Vec::new(),
                 keyboard_segments: Vec::new(),
                 audio_segments: Vec::new(),
+                camera3d_segments: Vec::new(),
             }),
             clips: vec![
                 ClipConfiguration {
@@ -2074,6 +2086,7 @@ mod tests {
                     caption_segments: Vec::new(),
                     keyboard_segments: Vec::new(),
                     audio_segments: Vec::new(),
+                    camera3d_segments: Vec::new(),
                 }),
                 clips: vec![ClipConfiguration {
                     index: 0,
@@ -2159,6 +2172,7 @@ mod tests {
                 caption_segments: Vec::new(),
                 keyboard_segments: Vec::new(),
                 audio_segments: Vec::new(),
+                camera3d_segments: Vec::new(),
             }),
             clips: vec![ClipConfiguration {
                 index: 0,
@@ -2270,6 +2284,7 @@ mod tests {
                 caption_segments: Vec::new(),
                 keyboard_segments: Vec::new(),
                 audio_segments: Vec::new(),
+                camera3d_segments: Vec::new(),
             }),
             clips: vec![
                 ClipConfiguration {
@@ -2366,6 +2381,7 @@ mod tests {
                 caption_segments: Vec::new(),
                 keyboard_segments: Vec::new(),
                 audio_segments: Vec::new(),
+                camera3d_segments: Vec::new(),
             }),
             clips: vec![ClipConfiguration {
                 index: 0,
@@ -2405,6 +2421,7 @@ mod tests {
                 caption_segments: Vec::new(),
                 keyboard_segments: Vec::new(),
                 audio_segments: Vec::new(),
+                camera3d_segments: Vec::new(),
             }),
             clips: vec![ClipConfiguration {
                 index: 0,
@@ -2545,6 +2562,7 @@ mod tests {
                 caption_segments: Vec::new(),
                 keyboard_segments: Vec::new(),
                 audio_segments,
+                camera3d_segments: Vec::new(),
             }),
             clips: vec![ClipConfiguration {
                 index: 0,

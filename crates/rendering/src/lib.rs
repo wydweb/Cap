@@ -11,6 +11,8 @@ use cursor_interpolation::{
     InterpolatedCursorPosition, interpolate_cursor, interpolate_cursor_with_click_spring,
 };
 use decoder::{AsyncVideoDecoderHandle, spawn_decoder};
+#[cfg(target_os = "macos")]
+use frame_pipeline::finish_encoder_bgra_surface;
 use frame_pipeline::{
     NV12BufferPool, RenderSession, finish_encoder_nv12_pooled, finish_encoder_timed,
     flush_pending_readback,
@@ -18,8 +20,8 @@ use frame_pipeline::{
 use futures::future::OptionFuture;
 use layers::{
     Background, BackgroundLayer, BlurLayer, Camera3DBlurKind, Camera3DLayer, CameraLayer,
-    CaptionsLayer, ColorGradeLayer, CursorLayer, DisplayLayer, FrameLayer, KeyboardLayer,
-    MaskLayer, NotchLayer, NotchUniforms, TextLayer,
+    CaptionsLayer, ClickRippleLayer, ColorGradeLayer, CursorLayer, DisplayLayer, FrameLayer,
+    KeyboardLayer, MaskLayer, NotchLayer, NotchUniforms, TextLayer,
 };
 use specta::Type;
 use spring_mass_damper::SpringMassDamperSimulationConfig;
@@ -57,7 +59,13 @@ mod zoom_spring;
 
 pub use coord::*;
 pub use decoder::{DecodedFrame, DecoderStatus, DecoderType, PixelFormat};
+#[cfg(target_os = "macos")]
+pub use frame_pipeline::Nv12Surface;
+#[cfg(target_os = "macos")]
+pub use frame_pipeline::SurfaceFrame;
 pub use frame_pipeline::{GpuOutputFormat, Nv12RenderedFrame, RenderedFrame, SharedNv12Buffer};
+#[cfg(target_os = "macos")]
+pub use frame_pipeline::{PendingSurface, RgbaToBgraSurfaceConverter};
 pub use layers::{BackgroundTextureCache, clean_background_path};
 pub use project_recordings::{ProjectRecordingsMeta, SegmentRecordings, Video};
 use transition::{TransitionCompositor, TransitionParameters};
@@ -200,10 +208,50 @@ pub fn create_wgpu_instance_sync() -> wgpu::Instance {
     #[cfg(target_os = "windows")]
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
         backends: wgpu::Backends::DX12,
+        backend_options: wgpu::BackendOptions {
+            dx12: wgpu::Dx12BackendOptions {
+                shader_compiler: bundled_dxc_compiler(),
+            },
+            ..Default::default()
+        },
         ..Default::default()
     });
 
     instance
+}
+
+#[cfg(target_os = "windows")]
+fn bundled_dxc_compiler() -> wgpu::Dx12Compiler {
+    let Some((dxc_path, dxil_path)) = bundled_dxc_paths() else {
+        tracing::debug!("Bundled DXC unavailable; using FXC for DX12 shader compilation");
+        return wgpu::Dx12Compiler::Fxc;
+    };
+
+    tracing::info!(
+        dxc_path = %dxc_path.display(),
+        dxil_path = %dxil_path.display(),
+        "Using bundled DXC for DX12 shader compilation"
+    );
+    wgpu::Dx12Compiler::DynamicDxc {
+        dxc_path: dxc_path.to_string_lossy().into_owned(),
+        dxil_path: dxil_path.to_string_lossy().into_owned(),
+        max_shader_model: wgpu::DxcShaderModel::V6_7,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn bundled_dxc_paths() -> Option<(PathBuf, PathBuf)> {
+    let executable = std::env::current_exe().ok()?;
+    let executable_dir = executable.parent()?;
+    let profile_dir = (executable_dir.file_name()? == "deps")
+        .then(|| executable_dir.parent())
+        .flatten();
+
+    [Some(executable_dir), profile_dir]
+        .into_iter()
+        .flatten()
+        .map(|dir| (dir.join("dxcompiler.dll"), dir.join("dxil.dll")))
+        .find(|(dxc_path, dxil_path)| dxc_path.is_file() && dxil_path.is_file())
 }
 
 pub async fn create_wgpu_instance() -> wgpu::Instance {
@@ -551,6 +599,8 @@ pub enum RenderingError {
         frame_number: u32,
         recording_time: f32,
     },
+    #[error("Failed to create preview surface: {0}")]
+    Surface(String),
     #[error(
         "Failed to decode video frames. The recording may be corrupted or incomplete. Try re-recording or contact support if the issue persists."
     )]
@@ -999,6 +1049,20 @@ pub async fn render_video_to_channel(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Escape hatch for the export zero-copy VideoToolbox path: when set, the
+/// renderer reads NV12 frames back to CPU and the encoder consumes software
+/// frames, exactly as before the IOSurface path existed.
+#[cfg(target_os = "macos")]
+pub fn zero_copy_export_disabled() -> bool {
+    std::env::var("CAP_EXPORT_DISABLE_ZERO_COPY").is_ok_and(|value| {
+        matches!(
+            value.to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        )
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
 pub async fn render_video_to_channel_nv12(
     constants: &RenderVideoConstants,
     project: &ProjectConfiguration,
@@ -1089,6 +1153,10 @@ pub async fn render_video_to_channel_nv12(
 
     let renderer_setup_start = Instant::now();
     let mut frame_renderer = FrameRenderer::new(constants);
+    #[cfg(target_os = "macos")]
+    if !zero_copy_export_disabled() {
+        frame_renderer.enable_nv12_surface_output();
+    }
 
     let mut layers = RendererLayers::new_with_options(
         &constants.device,
@@ -2014,6 +2082,18 @@ impl RenderVideoConstants {
             preserve_screen_alpha: false,
         };
 
+        Self::new_with_options(options, recording_meta, meta).await
+    }
+
+    /// [`Self::new`] with the `RenderOptions` supplied by the caller instead
+    /// of probed from segment videos -- the still-image path (screenshot
+    /// editors), where there is no `SegmentRecordings` to measure and the
+    /// alpha channel must survive (`preserve_screen_alpha`).
+    pub async fn new_with_options(
+        options: RenderOptions,
+        recording_meta: RecordingMeta,
+        meta: StudioRecordingMeta,
+    ) -> Result<Self, RenderingError> {
         let instance = create_wgpu_instance().await;
 
         let force_software_adapter = force_software_wgpu_adapter();
@@ -2079,6 +2159,12 @@ impl RenderVideoConstants {
         let mut required_features = wgpu::Features::empty();
         if adapter.features().contains(wgpu::Features::PIPELINE_CACHE) {
             required_features |= wgpu::Features::PIPELINE_CACHE;
+        }
+        if adapter
+            .features()
+            .contains(wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES)
+        {
+            required_features |= wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES;
         }
 
         let device_descriptor = wgpu::DeviceDescriptor {
@@ -2269,6 +2355,14 @@ fn fit_crop_to_target(
     [x0, y0, x0 + w, y0 + h]
 }
 
+/// One in-flight click ripple: where the drawn cursor was when the button
+/// went down, and how far through its animation it is.
+#[derive(Clone, Debug)]
+pub struct ClickRipple {
+    pub position: Coord<RawDisplayUVSpace>,
+    pub progress: f32,
+}
+
 #[derive(Clone, Debug)]
 pub struct ProjectUniforms {
     pub output_size: (u32, u32),
@@ -2294,6 +2388,7 @@ pub struct ProjectUniforms {
     display_outer_bounds: [f32; 4],
     interpolated_cursor: Option<InterpolatedCursorPosition>,
     pub prev_cursor: Option<InterpolatedCursorPosition>,
+    pub click_ripples: Vec<ClickRipple>,
     pub project: ProjectConfiguration,
     pub zoom: InterpolatedZoom,
     pub scene: InterpolatedScene,
@@ -2313,6 +2408,51 @@ pub struct ProjectUniforms {
     /// The 2D zoom re-expressed as an on-screen card magnification while a 3D
     /// pose is active (the display itself renders unzoomed into the card).
     pub camera3d_zoom: Option<camera3d::Camera3DScreenZoom>,
+}
+
+fn cursor_time_for_interpolation(time: f32, stop_time: Option<f32>) -> f32 {
+    stop_time.map_or(time, |stop_time| time.min(stop_time))
+}
+
+fn collect_click_ripples(
+    project: &ProjectConfiguration,
+    cursor_events: &CursorEvents,
+    now_ms: f64,
+    cursor_stop_time: Option<f32>,
+    cursor_interp_fn: &dyn Fn(f32) -> Option<InterpolatedCursorPosition>,
+) -> Vec<ClickRipple> {
+    let ripple = &project.cursor.ripple;
+    if project.cursor.hide || !ripple.enabled {
+        return Vec::new();
+    }
+
+    let duration_ms = ripple.duration_clamped() as f64 * 1000.0;
+    let mut ripples: Vec<ClickRipple> = cursor_events
+        .clicks
+        .iter()
+        .filter(|click| click.down)
+        .filter_map(|click| {
+            let age_ms = now_ms - click.time_ms;
+            if age_ms < 0.0 || age_ms >= duration_ms {
+                return None;
+            }
+
+            let cursor_time =
+                cursor_time_for_interpolation((click.time_ms / 1000.0) as f32, cursor_stop_time);
+            let position = cursor_interp_fn(cursor_time)?.position;
+
+            Some(ClickRipple {
+                position,
+                progress: (age_ms / duration_ms) as f32,
+            })
+        })
+        .collect();
+
+    if ripples.len() > layers::MAX_CLICK_RIPPLES {
+        ripples.drain(..ripples.len() - layers::MAX_CLICK_RIPPLES);
+    }
+
+    ripples
 }
 
 #[derive(Debug, Clone)]
@@ -3321,7 +3461,7 @@ impl ProjectUniforms {
         frame_number: u32,
         fps: u32,
         resolution_base: XY<u32>,
-        _cursor_events: &CursorEvents,
+        cursor_events: &CursorEvents,
         segment_frames: &DecodedSegmentFrames,
         total_duration: f64,
         zoom_timeline: &ZoomTransformTimeline,
@@ -3355,17 +3495,10 @@ impl ProjectUniforms {
             .stop_movement_in_last_seconds
             .map(|seconds| (total_duration - seconds as f64).max(0.0) as f32);
 
-        let cursor_time_for_interp = if let Some(stop_time) = cursor_stop_time {
-            current_recording_time.min(stop_time)
-        } else {
-            current_recording_time
-        };
-
-        let prev_cursor_time_for_interp = if let Some(stop_time) = cursor_stop_time {
-            prev_recording_time.min(stop_time)
-        } else {
-            prev_recording_time
-        };
+        let cursor_time_for_interp =
+            cursor_time_for_interpolation(current_recording_time, cursor_stop_time);
+        let prev_cursor_time_for_interp =
+            cursor_time_for_interpolation(prev_recording_time, cursor_stop_time);
 
         let cursor_motion_blur = project.cursor.motion_blur.clamp(0.0, 1.0);
         let screen_motion_blur = project.screen_motion_blur.clamp(0.0, 1.0);
@@ -3376,6 +3509,13 @@ impl ProjectUniforms {
 
         let interpolated_cursor = cursor_interp_fn(cursor_time_for_interp);
         let prev_interpolated_cursor = cursor_interp_fn(prev_cursor_time_for_interp);
+        let click_ripples = collect_click_ripples(
+            project,
+            cursor_events,
+            current_recording_time as f64 * 1000.0,
+            cursor_stop_time,
+            cursor_interp_fn,
+        );
         let lookback_t = (cursor_time_for_interp - 0.4).max(0.0);
         let past_cursor_for_tilt = cursor_interp_fn(lookback_t);
 
@@ -4352,6 +4492,7 @@ impl ProjectUniforms {
             frame_number,
             recording_time: current_recording_time as f64,
             prev_cursor: prev_interpolated_cursor,
+            click_ripples,
             display_parent_motion_px: display_motion_parent,
             motion_blur_amount: cursor_motion_blur,
             masks,
@@ -4366,6 +4507,116 @@ impl ProjectUniforms {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn ripple_click(time_ms: f64, down: bool) -> cap_project::CursorClickEvent {
+        cap_project::CursorClickEvent {
+            active_modifiers: Vec::new(),
+            cursor_num: 0,
+            cursor_id: "cursor".to_owned(),
+            time_ms,
+            down,
+        }
+    }
+
+    fn ripple_cursor_at(time: f32) -> Option<InterpolatedCursorPosition> {
+        Some(InterpolatedCursorPosition {
+            position: Coord::new(XY::new(f64::from(time), 0.5)),
+            velocity: XY::new(0.0, 0.0),
+            cursor_id: "cursor".to_owned(),
+        })
+    }
+
+    #[test]
+    fn click_ripples_share_cursor_freeze_without_freezing_the_animation() {
+        let mut project = ProjectConfiguration::default();
+        project.cursor.ripple.enabled = true;
+        project.cursor.ripple.duration = 1.0;
+        let events = CursorEvents {
+            clicks: vec![ripple_click(8_500.0, true)],
+            ..Default::default()
+        };
+
+        for (now_ms, expected_progress) in [(8_750.0, 0.25), (9_000.0, 0.5)] {
+            let ripples =
+                collect_click_ripples(&project, &events, now_ms, Some(8.0), &ripple_cursor_at);
+            let displayed = ripple_cursor_at(cursor_time_for_interpolation(
+                (now_ms / 1000.0) as f32,
+                Some(8.0),
+            ))
+            .unwrap();
+
+            assert_eq!(ripples.len(), 1);
+            assert_eq!(ripples[0].position.coord, displayed.position.coord);
+            assert_eq!(ripples[0].position.coord.x, 8.0);
+            assert_eq!(ripples[0].progress, expected_progress);
+        }
+    }
+
+    #[test]
+    fn click_ripples_preserve_click_positions_before_the_freeze_or_without_it() {
+        let mut project = ProjectConfiguration::default();
+        project.cursor.ripple.enabled = true;
+        let events = CursorEvents {
+            clicks: vec![ripple_click(8_500.0, true)],
+            ..Default::default()
+        };
+
+        for (stop_time, expected_position) in [(None, 8.5), (Some(9.0), 8.5), (Some(0.0), 0.0)] {
+            let ripples =
+                collect_click_ripples(&project, &events, 8_750.0, stop_time, &ripple_cursor_at);
+
+            assert_eq!(ripples.len(), 1);
+            assert_eq!(ripples[0].position.coord.x, expected_position);
+        }
+    }
+
+    #[test]
+    fn click_ripples_exclude_future_expired_and_release_events() {
+        let mut project = ProjectConfiguration::default();
+        project.cursor.ripple.enabled = true;
+        project.cursor.ripple.duration = 1.0;
+        let events = CursorEvents {
+            clicks: vec![
+                ripple_click(8_000.0, true),
+                ripple_click(8_500.0, false),
+                ripple_click(9_000.0, true),
+                ripple_click(9_001.0, true),
+            ],
+            ..Default::default()
+        };
+
+        let ripples =
+            collect_click_ripples(&project, &events, 9_000.0, Some(8.0), &ripple_cursor_at);
+
+        assert_eq!(ripples.len(), 1);
+        assert_eq!(ripples[0].progress, 0.0);
+        assert_eq!(ripples[0].position.coord.x, 8.0);
+    }
+
+    #[test]
+    fn click_ripples_respect_visibility_and_the_instance_limit() {
+        let mut project = ProjectConfiguration::default();
+        let events = CursorEvents {
+            clicks: (0..10)
+                .map(|index| ripple_click(index as f64, true))
+                .collect(),
+            ..Default::default()
+        };
+        assert!(collect_click_ripples(&project, &events, 10.0, None, &ripple_cursor_at).is_empty());
+
+        project.cursor.ripple.enabled = true;
+        project.cursor.hide = true;
+        assert!(collect_click_ripples(&project, &events, 10.0, None, &ripple_cursor_at).is_empty());
+
+        project.cursor.hide = false;
+        let ripples = collect_click_ripples(&project, &events, 10.0, None, &ripple_cursor_at);
+        assert_eq!(ripples.len(), layers::MAX_CLICK_RIPPLES);
+        assert_eq!(ripples[0].position.coord.x, f64::from(0.004_f32));
+        assert_eq!(
+            ripples.last().unwrap().position.coord.x,
+            f64::from(0.009_f32)
+        );
+    }
 
     fn render_options(screen_width: u32, screen_height: u32) -> RenderOptions {
         RenderOptions {
@@ -4818,6 +5069,10 @@ pub struct FrameRenderer<'a> {
     constants: &'a RenderVideoConstants,
     session: Option<RenderSession>,
     nv12_converter: Option<frame_pipeline::RgbaToNv12Converter>,
+    #[cfg(target_os = "macos")]
+    nv12_surface_output: bool,
+    #[cfg(target_os = "macos")]
+    bgra_surface_converter: Option<RgbaToBgraSurfaceConverter>,
     nv12_buffer_pool: NV12BufferPool,
     transition_compositor: Option<TransitionCompositor>,
 }
@@ -4830,9 +5085,37 @@ impl<'a> FrameRenderer<'a> {
             constants,
             session: None,
             nv12_converter: None,
+            #[cfg(target_os = "macos")]
+            nv12_surface_output: false,
+            #[cfg(target_os = "macos")]
+            bgra_surface_converter: None,
             nv12_buffer_pool: NV12BufferPool::new(6),
             transition_compositor: None,
         }
+    }
+
+    /// NV12 frames come back as IOSurface-backed CVPixelBuffers instead of
+    /// CPU readbacks, for zero-copy VideoToolbox encoding. Only meaningful on
+    /// macOS with a hardware adapter; the converter falls back to readback
+    /// output on its own if the surface machinery is unavailable.
+    #[cfg(target_os = "macos")]
+    pub fn enable_nv12_surface_output(&mut self) {
+        if !self.constants.is_software_adapter {
+            self.nv12_surface_output = true;
+        }
+    }
+
+    fn new_nv12_converter(&self) -> frame_pipeline::RgbaToNv12Converter {
+        #[cfg(target_os = "macos")]
+        {
+            let mut converter = frame_pipeline::RgbaToNv12Converter::new(&self.constants.device);
+            if self.nv12_surface_output {
+                converter.enable_surface_output();
+            }
+            converter
+        }
+        #[cfg(not(target_os = "macos"))]
+        frame_pipeline::RgbaToNv12Converter::new(&self.constants.device)
     }
 
     pub fn reset_session(&mut self) {
@@ -5097,6 +5380,96 @@ impl<'a> FrameRenderer<'a> {
             .unwrap_or(Err(RenderingError::BufferMapWaitingFailed))
     }
 
+    #[cfg(target_os = "macos")]
+    pub async fn render_immediate_bgra_surface(
+        &mut self,
+        segment_frames: DecodedSegmentFrames,
+        uniforms: ProjectUniforms,
+        cursor: &CursorEvents,
+        render_display: bool,
+        layers: &mut RendererLayers,
+    ) -> Result<SurfaceFrame, RenderingError> {
+        let mut last_error = None;
+        for attempt in 0..Self::MAX_RENDER_RETRIES {
+            if attempt > 0 {
+                tracing::warn!(
+                    frame_number = uniforms.frame_number,
+                    attempt = attempt + 1,
+                    "Retrying BGRA surface frame render after GPU error"
+                );
+                self.reset_session();
+                tokio::time::sleep(std::time::Duration::from_millis(100 * (attempt as u64 + 1)))
+                    .await;
+            }
+            if self.bgra_surface_converter.is_none() {
+                self.bgra_surface_converter =
+                    Some(RgbaToBgraSurfaceConverter::new(&self.constants.device)?);
+            }
+            let session = self.session.get_or_insert_with(|| {
+                RenderSession::new(
+                    &self.constants.device,
+                    uniforms.output_size.0,
+                    uniforms.output_size.1,
+                )
+            });
+            session.update_texture_size(
+                &self.constants.device,
+                uniforms.output_size.0,
+                uniforms.output_size.1,
+            );
+            let mut encoder = self.constants.device.create_command_encoder(
+                &(wgpu::CommandEncoderDescriptor {
+                    label: Some("Render Encoder (NV12 Surface)"),
+                }),
+            );
+
+            if let Err(error) = layers
+                .prepare_with_encoder(
+                    self.constants,
+                    &uniforms,
+                    &segment_frames,
+                    cursor,
+                    &mut encoder,
+                    render_display,
+                )
+                .await
+            {
+                last_error = Some(error);
+                continue;
+            }
+            layers.render(
+                &self.constants.device,
+                &self.constants.queue,
+                &mut encoder,
+                session,
+                &uniforms,
+                render_display,
+            );
+            let converter = self
+                .bgra_surface_converter
+                .as_mut()
+                .expect("BGRA surface converter initialized");
+            match finish_encoder_bgra_surface(
+                session,
+                converter,
+                &self.constants.device,
+                &self.constants.queue,
+                &uniforms,
+                encoder,
+            )
+            .await
+            {
+                Ok(frame) => return Ok(frame),
+                Err(RenderingError::BufferMapWaitingFailed) => {
+                    last_error = Some(RenderingError::BufferMapWaitingFailed);
+                }
+                Err(error) => return Err(error),
+            }
+        }
+
+        Err(last_error.unwrap_or(RenderingError::BufferMapWaitingFailed))
+    }
+
     pub async fn flush_pipeline_nv12(
         &mut self,
     ) -> Option<Result<frame_pipeline::Nv12RenderedFrame, RenderingError>> {
@@ -5156,6 +5529,9 @@ impl<'a> FrameRenderer<'a> {
                     .await;
             }
 
+            if self.nv12_converter.is_none() {
+                self.nv12_converter = Some(self.new_nv12_converter());
+            }
             let session = self.session.get_or_insert_with(|| {
                 RenderSession::new(
                     &self.constants.device,
@@ -5186,9 +5562,10 @@ impl<'a> FrameRenderer<'a> {
                 compositor,
             )
             .await?;
-            let nv12_converter = self.nv12_converter.get_or_insert_with(|| {
-                frame_pipeline::RgbaToNv12Converter::new(&self.constants.device)
-            });
+            let nv12_converter = self
+                .nv12_converter
+                .as_mut()
+                .expect("nv12 converter initialized above");
 
             match finish_encoder_nv12_pooled(
                 session,
@@ -5207,6 +5584,93 @@ impl<'a> FrameRenderer<'a> {
                 }
                 Err(RenderingError::BufferMapFailed(error)) => {
                     last_error = Some(RenderingError::BufferMapFailed(error));
+                }
+                Err(error) => return Err(error),
+            }
+        }
+
+        Err(last_error.unwrap_or(RenderingError::BufferMapWaitingFailed))
+    }
+
+    #[cfg(target_os = "macos")]
+    pub async fn render_transition_bgra_surface(
+        &mut self,
+        outgoing: TransitionRenderInput<'_>,
+        incoming: TransitionRenderInput<'_>,
+        kind: ClipTransitionType,
+        progress: f32,
+        layers: &mut RendererLayers,
+    ) -> Result<SurfaceFrame, RenderingError> {
+        let mut last_error = None;
+        for attempt in 0..Self::MAX_RENDER_RETRIES {
+            if attempt > 0 {
+                tracing::warn!(
+                    frame_number = incoming.uniforms.frame_number,
+                    attempt = attempt + 1,
+                    "Retrying BGRA surface transition frame after GPU error"
+                );
+                self.reset_session();
+                tokio::time::sleep(std::time::Duration::from_millis(100 * (attempt as u64 + 1)))
+                    .await;
+            }
+            if self.bgra_surface_converter.is_none() {
+                self.bgra_surface_converter =
+                    Some(RgbaToBgraSurfaceConverter::new(&self.constants.device)?);
+            }
+            let session = self.session.get_or_insert_with(|| {
+                RenderSession::new(
+                    &self.constants.device,
+                    incoming.uniforms.output_size.0,
+                    incoming.uniforms.output_size.1,
+                )
+            });
+            session.update_texture_size(
+                &self.constants.device,
+                incoming.uniforms.output_size.0,
+                incoming.uniforms.output_size.1,
+            );
+            let compositor = self
+                .transition_compositor
+                .get_or_insert_with(|| TransitionCompositor::new(&self.constants.device));
+            compositor.ensure_size(
+                &self.constants.device,
+                incoming.uniforms.output_size.0,
+                incoming.uniforms.output_size.1,
+            );
+            let encoder = match produce_transition_texture(
+                self.constants,
+                &outgoing,
+                &incoming,
+                (kind, progress),
+                layers,
+                session,
+                compositor,
+            )
+            .await
+            {
+                Ok(encoder) => encoder,
+                Err(error) => {
+                    last_error = Some(error);
+                    continue;
+                }
+            };
+            let converter = self
+                .bgra_surface_converter
+                .as_mut()
+                .expect("BGRA surface converter initialized");
+            match finish_encoder_bgra_surface(
+                session,
+                converter,
+                &self.constants.device,
+                &self.constants.queue,
+                &incoming.uniforms,
+                encoder,
+            )
+            .await
+            {
+                Ok(frame) => return Ok(frame),
+                Err(RenderingError::BufferMapWaitingFailed) => {
+                    last_error = Some(RenderingError::BufferMapWaitingFailed);
                 }
                 Err(error) => return Err(error),
             }
@@ -5315,6 +5779,8 @@ impl<'a> FrameRenderer<'a> {
             frame_number,
             target_time_ns,
             format: frame_pipeline::GpuOutputFormat::Nv12,
+            #[cfg(target_os = "macos")]
+            surface: None,
         }
     }
 
@@ -5341,6 +5807,9 @@ impl<'a> FrameRenderer<'a> {
                     .await;
             }
 
+            if self.nv12_converter.is_none() {
+                self.nv12_converter = Some(self.new_nv12_converter());
+            }
             let session = self.session.get_or_insert_with(|| {
                 RenderSession::new(
                     &self.constants.device,
@@ -5355,9 +5824,10 @@ impl<'a> FrameRenderer<'a> {
                 uniforms.output_size.1,
             );
 
-            let nv12_converter = self.nv12_converter.get_or_insert_with(|| {
-                frame_pipeline::RgbaToNv12Converter::new(&self.constants.device)
-            });
+            let nv12_converter = self
+                .nv12_converter
+                .as_mut()
+                .expect("nv12 converter initialized above");
 
             let mut encoder = self.constants.device.create_command_encoder(
                 &(wgpu::CommandEncoderDescriptor {
@@ -5422,6 +5892,7 @@ pub struct RendererLayers {
     frame: FrameLayer,
     display: DisplayLayer,
     notch: NotchLayer,
+    click_ripple: ClickRippleLayer,
     cursor: CursorLayer,
     camera: CameraLayer,
     camera_only: CameraLayer,
@@ -5460,6 +5931,7 @@ impl RendererLayers {
                 shared_composite_pipeline.clone(),
                 prefer_cpu_conversion,
             ),
+            click_ripple: ClickRippleLayer::new(device),
             cursor: CursorLayer::new(device),
             camera: CameraLayer::new_with_all_shared_pipelines(
                 device,
@@ -5632,6 +6104,13 @@ impl RendererLayers {
             );
         }
 
+        self.click_ripple.prepare(
+            uniforms,
+            uniforms.resolution_base,
+            &uniforms.zoom,
+            constants,
+        );
+
         self.cursor.prepare(
             segment_frames,
             uniforms.resolution_base,
@@ -5787,6 +6266,12 @@ impl RendererLayers {
         timings.display_prepare_duration = start.elapsed();
 
         let start = Instant::now();
+        self.click_ripple.prepare(
+            uniforms,
+            uniforms.resolution_base,
+            &uniforms.zoom,
+            constants,
+        );
         self.cursor.prepare(
             segment_frames,
             uniforms.resolution_base,
@@ -5921,6 +6406,7 @@ impl RendererLayers {
         }
         self.camera.copy_to_texture(encoder);
         self.camera_only.copy_to_texture(encoder);
+        self.background.render_surface(encoder);
 
         {
             let mut pass = render_pass!(
@@ -6004,6 +6490,7 @@ impl RendererLayers {
 
         if should_render_cursor {
             let mut pass = render_pass!(content_view!(), wgpu::LoadOp::Load);
+            self.click_ripple.render(&mut pass);
             self.cursor.render(&mut pass);
         }
 

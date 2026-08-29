@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { type BunFile, file, spawn } from "bun";
 import type { VideoMetadata } from "./job-manager";
 import {
-	createMediaInput,
 	DOWNLOAD_TIMEOUT_MS,
 	PROCESS_TIMEOUT_MS,
 	type ProgressCallback,
@@ -28,7 +27,6 @@ const MAX_PROCESS_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 // long (e.g. 60+ minute) manifest with 1000+ segments.
 const STREAMING_DOWNLOAD_TIMEOUT_PER_SECOND_MS = 5_000;
 const MAX_STREAMING_DOWNLOAD_TIMEOUT_MS = 30 * 60 * 1000;
-const STREAMING_DURATION_PROBE_TIMEOUT_MS = 15_000;
 const THUMBNAIL_TIMEOUT_MS = 60_000;
 const PREVIEW_GIF_TIMEOUT_MS = 30_000;
 const PROBE_H264_LEVEL_TIMEOUT_MS = 10_000;
@@ -76,6 +74,7 @@ export interface VideoProcessingOptions {
 	crf?: number;
 	preset?: "ultrafast" | "fast" | "medium" | "slow";
 	remuxOnly?: boolean;
+	normalizeH264Level?: boolean;
 	timeoutMs?: number;
 }
 
@@ -151,6 +150,7 @@ const DEFAULT_OPTIONS: Required<VideoProcessingOptions> = {
 	crf: 23,
 	preset: "medium",
 	remuxOnly: false,
+	normalizeH264Level: false,
 	timeoutMs: PROCESS_TIMEOUT_MS,
 };
 
@@ -1115,24 +1115,35 @@ export function buildStreamingDownloadFfmpegArgs(
 	];
 }
 
-async function probeStreamingDurationSeconds(
-	videoUrl: string,
+export async function estimateMaterializedStreamingDurationSeconds(
+	dirPath: string,
 ): Promise<number | null> {
-	try {
-		const input = createMediaInput(videoUrl);
-		try {
-			const duration = await withTimeout(
-				input.computeDuration(),
-				STREAMING_DURATION_PROBE_TIMEOUT_MS,
-			);
-			return Number.isFinite(duration) && duration > 0 ? duration : null;
-		} finally {
-			input.dispose();
+	let longestDuration = 0;
+
+	for (const entry of await readdir(dirPath)) {
+		if (!entry.endsWith(".m3u8") && !entry.endsWith(".mpd")) continue;
+		const content = await file(join(dirPath, entry)).text();
+
+		if (entry.endsWith(".mpd")) {
+			const durationAttribute = content.match(
+				/\bmediaPresentationDuration\s*=\s*["']([^"']+)["']/i,
+			)?.[1];
+			const duration = parseIsoDurationSeconds(durationAttribute);
+			if (duration) longestDuration = Math.max(longestDuration, duration);
+			continue;
 		}
-	} catch {
-		// Best-effort: fall back to the flat DOWNLOAD_TIMEOUT_MS budget below.
-		return null;
+
+		let playlistDuration = 0;
+		for (const match of content.matchAll(/^#EXTINF:([\d.]+)/gm)) {
+			const segmentDuration = Number(match[1]);
+			if (Number.isFinite(segmentDuration) && segmentDuration > 0) {
+				playlistDuration += segmentDuration;
+			}
+		}
+		longestDuration = Math.max(longestDuration, playlistDuration);
 	}
+
+	return longestDuration > 0 ? longestDuration : null;
 }
 
 function getStreamingDownloadTimeoutMs(durationSeconds: number | null): number {
@@ -1166,7 +1177,8 @@ async function downloadStreamingVideoToTemp(
 			manifestDir,
 			abortSignal,
 		);
-		const durationSeconds = await probeStreamingDurationSeconds(videoUrl);
+		const durationSeconds =
+			await estimateMaterializedStreamingDurationSeconds(manifestDir);
 		const downloadTimeoutMs = getStreamingDownloadTimeoutMs(durationSeconds);
 
 		await runFfmpegCommand(
@@ -1466,6 +1478,13 @@ export async function processVideo(
 			? await probeH264Level(inputPath, abortSignal)
 			: null;
 	const targetH264Level = pickMobileSafeH264Level(metadata, opts);
+	const normalizeH264Level =
+		opts.normalizeH264Level &&
+		metadata.videoCodec === "h264" &&
+		sourceH264Level !== null &&
+		sourceH264Level > targetH264Level.value &&
+		metadata.width <= opts.maxWidth &&
+		metadata.height <= opts.maxHeight;
 	const videoTranscode = remuxOnly
 		? false
 		: needsVideoTranscode(metadata, opts, sourceH264Level);
@@ -1489,7 +1508,14 @@ export async function processVideo(
 		inputPath,
 	];
 
-	if (videoTranscode) {
+	if (normalizeH264Level) {
+		ffmpegArgs.push(
+			"-c:v",
+			"copy",
+			"-bsf:v",
+			`h264_metadata=level=${targetH264Level.ffmpegValue}`,
+		);
+	} else if (videoTranscode) {
 		ffmpegArgs.push(
 			"-c:v",
 			"libx264",

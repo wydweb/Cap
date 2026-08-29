@@ -2838,9 +2838,7 @@ pub async fn delete_recording(app: AppHandle, state: MutableState<'_, App>) -> R
         CurrentRecordingChanged.emit(&app).ok();
         RecordingStopped {}.emit(&app).ok();
 
-        if let Some(window) = CapWindowId::RecordingControls.get(&app) {
-            let _ = window.hide();
-        }
+        dismiss_recording_controls(&app);
 
         let delete_result = discard_recording(&app, recording).await;
 
@@ -3192,9 +3190,7 @@ async fn handle_recording_end(
 
     let _ = app.recording_logging_handle.reload(None);
 
-    if let Some(window) = CapWindowId::RecordingControls.get(&handle) {
-        let _ = window.hide();
-    }
+    dismiss_recording_controls(&handle);
 
     // Destroy any target-select overlays so they don't reappear when the main window comes back.
     // On Windows, hide() leaves the DirectComposition transparency surface composited on screen
@@ -3263,6 +3259,16 @@ async fn handle_recording_end(
     }
 
     Ok(())
+}
+
+fn dismiss_recording_controls(app: &AppHandle) {
+    if let Some(window) = CapWindowId::RecordingControls.get(app) {
+        // Windows can keep a hidden transparent DirectComposition surface visible.
+        #[cfg(windows)]
+        let _ = window.close();
+        #[cfg(not(windows))]
+        let _ = window.hide();
+    }
 }
 
 fn compute_studio_duration_secs(recording_dir: &std::path::Path) -> f64 {

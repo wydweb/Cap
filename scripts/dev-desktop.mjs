@@ -35,7 +35,12 @@ let lastTauriCode = 0;
 let exiting = false;
 
 function startTauri() {
-	tauri = spawn("pnpm", ["tauri", "dev"], { stdio: "inherit" });
+	const command = process.platform === "win32" ? "cmd.exe" : "pnpm";
+	const args =
+		process.platform === "win32"
+			? ["/d", "/s", "/c", "pnpm", "tauri", "dev"]
+			: ["tauri", "dev"];
+	tauri = spawn(command, args, { stdio: "inherit" });
 	tauri.on("exit", (code, signal) => {
 		tauri = null;
 		lastTauriCode = signal ? 1 : (code ?? 1);

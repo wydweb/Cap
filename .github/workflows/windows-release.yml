@@ -33,13 +33,19 @@ jobs:
             throw "Could not read package.version from apps/desktop/src-tauri/Cargo.toml"
           }
 
-          $version = $Matches[1]
-          $tag = "cap-v$version"
-          if ("${{ github.ref_type }}" -eq "tag" -and "${{ github.ref_name }}" -ne $tag) {
-            throw "Tag '${{ github.ref_name }}' does not match Cargo version '$version'. Expected '$tag'."
+          $appVersion = $Matches[1]
+          $tag = "cap-v$appVersion"
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $tag = "${{ github.ref_name }}"
+            $allowedTags = @("cap-v$appVersion", "cap-v$appVersion-opt")
+            if ($tag -notin $allowedTags) {
+              throw "Tag '$tag' does not match Cargo version '$appVersion'. Expected one of: $($allowedTags -join ', ')."
+            }
           }
 
-          "version=$version" >> $env:GITHUB_OUTPUT
+          $releaseVersion = $tag -replace '^cap-v', ''
+          "version=$releaseVersion" >> $env:GITHUB_OUTPUT
+          "app_version=$appVersion" >> $env:GITHUB_OUTPUT
           "tag=$tag" >> $env:GITHUB_OUTPUT
 
       - name: Install Rust
@@ -60,7 +66,7 @@ jobs:
         shell: pwsh
         run: |
           @"
-          appVersion=${{ steps.metadata.outputs.version }}
+          appVersion=${{ steps.metadata.outputs.app_version }}
           VITE_ENVIRONMENT=production
           NEXT_PUBLIC_WEB_URL=https://cap.so
           NEXTAUTH_URL=https://cap.so

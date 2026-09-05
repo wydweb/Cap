@@ -21,7 +21,7 @@ import {
 	onMount,
 	Show,
 } from "solid-js";
-import { createStore, produce } from "solid-js/store";
+import { createStore, produce, reconcile } from "solid-js/store";
 import { TransitionGroup } from "solid-transition-group";
 import { useI18n } from "~/i18n";
 import { authStore } from "~/store";
@@ -30,6 +30,7 @@ import { createTauriEventListener } from "~/utils/createEventListener";
 import {
 	createCurrentRecordingQuery,
 	createOptionsQuery,
+	revealRecordingWindow,
 } from "~/utils/queries";
 import { handleRecordingResult } from "~/utils/recording";
 import type {
@@ -111,6 +112,11 @@ function InProgressRecordingInner() {
 	const [recordingFailure, setRecordingFailure] = createSignal<string | null>(
 		null,
 	);
+	const [pauseError, setPauseError] = createSignal<string | null>(null);
+	const [pausePendingAction, setPausePendingAction] = createSignal<
+		string | null
+	>(null);
+	let pauseRequest: object | undefined;
 	const [degradedReason, setDegradedReason] = createSignal<string | null>(null);
 	const [issuePanelVisible, setIssuePanelVisible] = createSignal(false);
 	const [issueKey, setIssueKey] = createSignal("");
@@ -152,6 +158,8 @@ function InProgressRecordingInner() {
 			issues.push(t("recording.cameraDisconnected"));
 		const failure = recordingFailure();
 		if (failure) issues.push(failure);
+		const controlError = pauseError();
+		if (controlError) issues.push(controlError);
 		return issues;
 	});
 
@@ -199,6 +207,9 @@ function InProgressRecordingInner() {
 	createTauriEventListener(events.recordingEvent, (payload) => {
 		switch (payload.variant) {
 			case "Countdown":
+				pauseRequest = undefined;
+				setPausePendingAction(null);
+				setPauseError(null);
 				setStartingDismissed(false);
 				setDisconnectedInputs({ microphone: false, camera: false });
 				setRecordingFailure(null);
@@ -213,6 +224,9 @@ function InProgressRecordingInner() {
 				});
 				break;
 			case "Started": {
+				pauseRequest = undefined;
+				setPausePendingAction(null);
+				setPauseError(null);
 				const wasStartingDismissed = startingDismissed();
 				setStartingDismissed(false);
 				setDisconnectedInputs({ microphone: false, camera: false });
@@ -231,11 +245,12 @@ function InProgressRecordingInner() {
 				setTime(Date.now());
 				setState({ variant: "recording" });
 				if (wasStartingDismissed) {
-					void getCurrentWindow().show();
+					void revealRecordingWindow();
 				}
 				break;
 			}
 			case "Paused":
+				setPauseError(null);
 				if (state().variant === "recording") {
 					setPauseResumes((a) => [...a, { pause: Date.now() }]);
 				}
@@ -243,6 +258,7 @@ function InProgressRecordingInner() {
 				setTime(Date.now());
 				break;
 			case "Resumed":
+				setPauseError(null);
 				setPauseResumes(
 					produce((a) => {
 						if (a.length === 0) return a;
@@ -479,10 +495,34 @@ function InProgressRecordingInner() {
 
 	const togglePause = createMutation(() => ({
 		mutationFn: async () => {
-			if (state().variant === "paused") {
-				await commands.resumeRecording();
-			} else {
-				await commands.pauseRecording();
+			if (
+				pauseRequest ||
+				(state().variant !== "recording" && state().variant !== "paused")
+			)
+				return;
+			const request = { start: start(), resume: state().variant === "paused" };
+			pauseRequest = request;
+			setPauseError(null);
+			setPausePendingAction(request.resume ? "Resuming…" : "Pausing…");
+			try {
+				if (request.resume) await commands.resumeRecording();
+				else await commands.pauseRecording();
+			} catch (error) {
+				if (
+					pauseRequest === request &&
+					start() === request.start &&
+					(state().variant === "recording" || state().variant === "paused")
+				) {
+					setPauseError(
+						`Could not ${request.resume ? "resume" : "pause"} recording: ${String(error)}`,
+					);
+				}
+				throw error;
+			} finally {
+				if (pauseRequest === request) {
+					pauseRequest = undefined;
+					setPausePendingAction(null);
+				}
 			}
 		},
 	}));
@@ -580,14 +620,16 @@ function InProgressRecordingInner() {
 	const updateMicInput = createMutation(() => ({
 		mutationFn: async (name: string | null) => {
 			if (!startedWithMicrophone && name !== null) return;
-			const previous = optionsQuery.rawOptions.micName ?? null;
-			if (previous === name) return;
 			await pauseRecordingForDeviceChange();
 			optionsQuery.setOptions("micName", name);
 			try {
 				await commands.setMicInput(name);
 			} catch (error) {
-				optionsQuery.setOptions("micName", previous);
+				if (
+					(optionsQuery.rawOptions.micName ?? null) !== name ||
+					String(error).includes("selection was superseded by a newer request")
+				)
+					return;
 				throw error;
 			}
 		},
@@ -596,22 +638,28 @@ function InProgressRecordingInner() {
 	const updateCameraInput = createMutation(() => ({
 		mutationFn: async (camera: CameraInfo | null) => {
 			if (!startedWithCameraInput && camera != null) return;
-			const selected = optionsQuery.rawOptions.cameraID ?? null;
-			if (!camera && selected === null) return;
-			if (camera && cameraMatchesSelection(camera, selected)) return;
 			await pauseRecordingForDeviceChange();
 			const next = cameraInfoToId(camera);
-			const previous = cloneDeviceOrModelId(selected);
-			optionsQuery.setOptions("cameraID", next);
+			optionsQuery.setOptions("cameraID", reconcile(next));
 			try {
 				await commands.setCameraInput(next, null);
-				if (!next && cameraWindowOpen()) {
+				if (
+					!next &&
+					optionsQuery.rawOptions.cameraID == null &&
+					cameraWindowOpen()
+				) {
 					const cameraWindow = await getCameraWindow();
-					if (cameraWindow) await cameraWindow.close();
+					if (cameraWindow && optionsQuery.rawOptions.cameraID == null)
+						await cameraWindow.close();
 					await refreshCameraWindowState();
 				}
 			} catch (error) {
-				optionsQuery.setOptions("cameraID", previous);
+				if (
+					JSON.stringify(optionsQuery.rawOptions.cameraID ?? null) !==
+						JSON.stringify(next) ||
+					String(error).includes("selection was superseded by a newer request")
+				)
+					return;
 				throw error;
 			}
 		},
@@ -874,10 +922,21 @@ function InProgressRecordingInner() {
 												}
 											>
 												<Show
-													when={isMaxRecordingLimitEnabled()}
-													fallback={formatTime(adjustedTime() / 1000)}
+													when={
+														pausePendingAction() || state().variant === "paused"
+													}
+													fallback={
+														<Show
+															when={isMaxRecordingLimitEnabled()}
+															fallback={formatTime(adjustedTime() / 1000)}
+														>
+															{formatTime(remainingRecordingTime() / 1000)}
+														</Show>
+													}
 												>
-													{formatTime(remainingRecordingTime() / 1000)}
+													<span role="status" aria-live="polite">
+														{pausePendingAction() ?? "Paused"}
+													</span>
 												</Show>
 											</Show>
 										</span>
@@ -1006,8 +1065,21 @@ function InProgressRecordingInner() {
 
 										{canPauseRecording() && (
 											<ActionButton
-												disabled={togglePause.isPending || isCountdown()}
+												disabled={
+													togglePause.isPending ||
+													isCountdown() ||
+													stopRequested() ||
+													stopRecording.isPending ||
+													teardownInFlight()
+												}
 												onClick={() => togglePause.mutate()}
+												aria-pressed={state().variant === "paused"}
+												aria-busy={togglePause.isPending}
+												class={cx(
+													"active:scale-90 motion-reduce:transform-none",
+													state().variant === "paused" &&
+														"bg-amber-3 text-amber-11 ring-1 ring-amber-6",
+												)}
 												title={
 													state().variant === "paused"
 														? t("recording.resume")
@@ -1019,11 +1091,18 @@ function InProgressRecordingInner() {
 														: t("recording.pause")
 												}
 											>
-												{state().variant === "paused" ? (
-													<IconCapPlayCircle />
-												) : (
-													<IconCapPauseCircle />
-												)}
+												<Show
+													when={togglePause.isPending}
+													fallback={
+														state().variant === "paused" ? (
+															<IconCapPlayCircle />
+														) : (
+															<IconCapPauseCircle />
+														)
+													}
+												>
+													<IconLucideLoader2 class="size-5 animate-spin motion-reduce:animate-none" />
+												</Show>
 											</ActionButton>
 										)}
 
@@ -1128,12 +1207,4 @@ function cameraInfoToId(camera: CameraInfo | null): DeviceOrModelID | null {
 	if (!camera) return null;
 	if (camera.model_id) return { ModelID: camera.model_id };
 	return { DeviceID: camera.device_id };
-}
-
-function cloneDeviceOrModelId(
-	id: DeviceOrModelID | null,
-): DeviceOrModelID | null {
-	if (!id) return null;
-	if ("DeviceID" in id) return { DeviceID: id.DeviceID };
-	return { ModelID: id.ModelID };
 }

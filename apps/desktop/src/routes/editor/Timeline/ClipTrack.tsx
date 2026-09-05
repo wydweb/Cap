@@ -18,6 +18,7 @@ import {
 } from "solid-js";
 import { produce } from "solid-js/store";
 
+import { useI18n } from "~/i18n";
 import type { ClipSpeedAudioMode, TimelineSegment } from "~/utils/tauri";
 import {
 	clampTransitionDuration,
@@ -438,6 +439,7 @@ export function ClipTrack(
 		handleUpdatePlayhead: (e: MouseEvent) => void;
 	},
 ) {
+	const { t } = useI18n();
 	const {
 		project,
 		setProject,
@@ -616,8 +618,10 @@ export function ClipTrack(
 
 					const clipName = () =>
 						hasMultipleRecordingSegments()
-							? `Clip ${segment().recordingSegment}`
-							: "Clip";
+							? t("editor.clipNumber", {
+									number: segment().recordingSegment ?? i(),
+								})
+							: t("editor.clip");
 
 					const clipTitle = () => {
 						const seg = segment();

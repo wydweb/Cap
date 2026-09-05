@@ -180,7 +180,7 @@ export function ZoomTrack(props: {
 					items: [
 						{
 							id: "generateZoomSegments",
-							text: "Generate zoom segments from clicks",
+							text: t("editor.generateZoomSegmentsFromClicks"),
 							action: handleGenerateZoomSegments,
 						},
 					],
@@ -321,14 +321,14 @@ export function ZoomTrack(props: {
 									}}
 								>
 									{isGeneratingAutoZoom()
-										? "Generating..."
-										: "Click to generate zoom segments"}
+										? t("editor.generating")
+										: t("editor.clickToGenerateZoomSegments")}
 								</Button>
 								<button
 									type="button"
 									class="flex shrink-0 justify-center items-center rounded-full outline-hidden text-gray-11 hover:text-gray-12 hover:bg-gray-5 focus-visible:ring-2 focus-visible:ring-gray-8 size-8 transition-colors"
 									disabled={isGeneratingAutoZoom()}
-									aria-label="Dismiss for this session"
+									aria-label={t("editor.dismissForSession")}
 									onClick={() => setSessionDismissedGenerateZoomPrompt(true)}
 								>
 									<IconLucideX class="size-4" />
@@ -576,7 +576,7 @@ export function ZoomTrack(props: {
 										items: [
 											{
 												id: "selectAllZoomSegments",
-												text: "Select all zoom segments",
+												text: t("editor.selectAllZoomSegments"),
 												enabled: allIndices.length > 1,
 												action: () =>
 													setEditorState("timeline", "selection", {
@@ -588,8 +588,10 @@ export function ZoomTrack(props: {
 												id: "deleteZoomSegments",
 												text:
 													targetIndices.length > 1
-														? `Delete ${targetIndices.length} zoom segments`
-														: "Delete zoom segment",
+														? t("editor.deleteZoomSegments", {
+																count: targetIndices.length,
+															})
+														: t("editor.deleteZoomSegment"),
 												action: () =>
 													projectActions.deleteZoomSegments(targetIndices),
 											},

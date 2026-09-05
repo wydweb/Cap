@@ -1164,14 +1164,13 @@ export function ConfigSidebar() {
 													}
 													leftIcon={<IconLucideCheck />}
 												>
-													Done
+													{t("editor.done")}
 												</EditorButton>
 												<span class="text-sm text-gray-10">
-													{value().segments.length} caption{" "}
-													{value().segments.length === 1
-														? "segment"
-														: "segments"}{" "}
-													selected
+													{t("editor.itemsSelectedByType", {
+														count: value().segments.length,
+														type: t("editor.captions"),
+													})}
 												</span>
 											</div>
 											<EditorButton
@@ -1183,7 +1182,7 @@ export function ConfigSidebar() {
 												}
 												leftIcon={<IconCapTrash />}
 											>
-												Delete
+												{t("common.delete")}
 											</EditorButton>
 										</div>
 										<For each={value().segments}>
@@ -1237,14 +1236,13 @@ export function ConfigSidebar() {
 													}}
 													leftIcon={<IconLucideCheck />}
 												>
-													Done
+													{t("editor.done")}
 												</EditorButton>
 												<span class="text-sm text-gray-10">
-													{value().segments.length} keyboard{" "}
-													{value().segments.length === 1
-														? "segment"
-														: "segments"}{" "}
-													selected
+													{t("editor.itemsSelectedByType", {
+														count: value().segments.length,
+														type: t("editor.keyboard"),
+													})}
 												</span>
 											</div>
 											<EditorButton
@@ -1256,7 +1254,7 @@ export function ConfigSidebar() {
 												}
 												leftIcon={<IconCapTrash />}
 											>
-												Delete
+												{t("common.delete")}
 											</EditorButton>
 										</div>
 										<For each={value().segments}>
@@ -1304,14 +1302,13 @@ export function ConfigSidebar() {
 													}
 													leftIcon={<IconLucideCheck />}
 												>
-													Done
+													{t("editor.done")}
 												</EditorButton>
 												<span class="text-sm text-gray-10">
-													{value().segments.length} text{" "}
-													{value().segments.length === 1
-														? "segment"
-														: "segments"}{" "}
-													selected
+													{t("editor.itemsSelectedByType", {
+														count: value().segments.length,
+														type: t("editor.text"),
+													})}
 												</span>
 											</div>
 											<EditorButton
@@ -1323,7 +1320,7 @@ export function ConfigSidebar() {
 												}
 												leftIcon={<IconCapTrash />}
 											>
-												Delete
+												{t("common.delete")}
 											</EditorButton>
 										</div>
 										<For each={value().segments}>
@@ -1376,14 +1373,13 @@ export function ConfigSidebar() {
 													}
 													leftIcon={<IconLucideCheck />}
 												>
-													Done
+													{t("editor.done")}
 												</EditorButton>
 												<span class="text-sm text-gray-10">
-													{value().segments.length} audio{" "}
-													{value().segments.length === 1
-														? "segment"
-														: "segments"}{" "}
-													selected
+													{t("editor.itemsSelectedByType", {
+														count: value().segments.length,
+														type: t("editor.audio"),
+													})}
 												</span>
 											</div>
 											<EditorButton
@@ -1395,7 +1391,7 @@ export function ConfigSidebar() {
 												}
 												leftIcon={<IconCapTrash />}
 											>
-												Delete
+												{t("common.delete")}
 											</EditorButton>
 										</div>
 										<For each={value().segments}>
@@ -1443,14 +1439,13 @@ export function ConfigSidebar() {
 													}
 													leftIcon={<IconLucideCheck />}
 												>
-													Done
+													{t("editor.done")}
 												</EditorButton>
 												<span class="text-sm text-gray-10">
-													{value().segments.length} mask{" "}
-													{value().segments.length === 1
-														? "segment"
-														: "segments"}{" "}
-													selected
+													{t("editor.itemsSelectedByType", {
+														count: value().segments.length,
+														type: t("editor.mask"),
+													})}
 												</span>
 											</div>
 											<EditorButton
@@ -1462,7 +1457,7 @@ export function ConfigSidebar() {
 												}
 												leftIcon={<IconCapTrash />}
 											>
-												Delete
+												{t("common.delete")}
 											</EditorButton>
 										</div>
 										<For each={value().segments}>
@@ -1511,9 +1506,10 @@ export function ConfigSidebar() {
 										const count = value().segments.length;
 										const total = totalZoomSegments();
 										if (total > 1 && count === total)
-											return `All ${total} selected`;
-										if (total > 1) return `${count} of ${total} selected`;
-										return `${count} selected`;
+											return t("editor.allSelected", { total });
+										if (total > 1)
+											return t("editor.selectionOfTotal", { count, total });
+										return t("editor.selectionCount", { count });
 									};
 
 									return (
@@ -1526,7 +1522,7 @@ export function ConfigSidebar() {
 														}
 														leftIcon={<IconLucideCheck />}
 													>
-														Done
+														{t("editor.done")}
 													</EditorButton>
 													<span class="text-sm text-gray-10 whitespace-nowrap">
 														{selectionLabel()}
@@ -1547,7 +1543,7 @@ export function ConfigSidebar() {
 																})
 															}
 														>
-															Select all
+															{t("editor.selectAll")}
 														</button>
 													</Show>
 												</div>
@@ -1560,7 +1556,7 @@ export function ConfigSidebar() {
 													}}
 													leftIcon={<IconCapTrash />}
 												>
-													Delete
+													{t("common.delete")}
 												</EditorButton>
 											</div>
 											<Show
@@ -1618,14 +1614,13 @@ export function ConfigSidebar() {
 													}
 													leftIcon={<IconLucideCheck />}
 												>
-													Done
+													{t("editor.done")}
 												</EditorButton>
 												<span class="text-sm text-gray-10">
-													{value().segments.length} 3D{" "}
-													{value().segments.length === 1
-														? "segment"
-														: "segments"}{" "}
-													selected
+													{t("editor.itemsSelectedByType", {
+														count: value().segments.length,
+														type: "3D",
+													})}
 												</span>
 											</div>
 											<EditorButton
@@ -1637,7 +1632,7 @@ export function ConfigSidebar() {
 												}}
 												leftIcon={<IconCapTrash />}
 											>
-												Delete
+												{t("common.delete")}
 											</EditorButton>
 										</div>
 										<Show
@@ -1697,14 +1692,13 @@ export function ConfigSidebar() {
 																}
 																leftIcon={<IconLucideCheck />}
 															>
-																Done
+																{t("editor.done")}
 															</EditorButton>
 															<span class="text-sm text-gray-10">
-																{value().segments.length} scene{" "}
-																{value().segments.length === 1
-																	? "segment"
-																	: "segments"}{" "}
-																selected
+																{t("editor.itemsSelectedByType", {
+																	count: value().segments.length,
+																	type: t("editor.scene"),
+																})}
 															</span>
 														</div>
 														<EditorButton
@@ -1721,7 +1715,7 @@ export function ConfigSidebar() {
 															}}
 															leftIcon={<IconCapTrash />}
 														>
-															Delete
+															{t("common.delete")}
 														</EditorButton>
 													</div>
 												</div>

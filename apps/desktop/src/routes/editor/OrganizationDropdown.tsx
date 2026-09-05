@@ -13,6 +13,7 @@ import {
 } from "solid-js";
 import toast from "solid-toast";
 import { SignInButton } from "~/components/SignInButton";
+import { useI18n } from "~/i18n";
 import {
 	createSelectedOrganization,
 	type DesktopOrganization,
@@ -336,6 +337,7 @@ function BrandSettingsDialog(props: {
 }
 
 export function OrganizationDropdown() {
+	const { t } = useI18n();
 	const organizationSelection = createSelectedOrganization();
 	const [settingsOrganizationId, setSettingsOrganizationId] = createSignal<
 		string | null
@@ -359,7 +361,7 @@ export function OrganizationDropdown() {
 		}
 		if (availability === "loading") return "Loading...";
 		if (availability === "unavailable") return "Organization";
-		return "Sign in";
+		return t("settings.signIn");
 	});
 	const fallbackTitle = createMemo(() => {
 		const availability = organizationSelection.availability();

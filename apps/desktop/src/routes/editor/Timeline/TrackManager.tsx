@@ -1,6 +1,7 @@
 import { Popover } from "@kobalte/core/popover";
 import { cx } from "cva";
 import { createSignal, For, type JSX, Show } from "solid-js";
+import { useI18n } from "~/i18n";
 import type { TimelineTrackType } from "../context";
 import { CAP_TRACK_FILL_CLASS } from "./Track";
 
@@ -155,6 +156,7 @@ export function TrackManager(props: {
 	onToggle(type: TimelineTrackType, next: boolean): void;
 	onAdd(type: TimelineTrackType): void;
 }) {
+	const { t } = useI18n();
 	const selectable = () => props.options.filter((option) => !option.locked);
 	const [open, setOpen] = createSignal(false);
 
@@ -183,7 +185,7 @@ export function TrackManager(props: {
 				onMouseDown={(e) => e.stopPropagation()}
 			>
 				<IconLucidePlus class="size-3.5 shrink-0" />
-				<span class="truncate">Add track</span>
+				<span class="truncate">{t("editor.addTrack")}</span>
 				<IconCapChevronDown class="size-2.5 shrink-0 text-white/70 transition-transform duration-200 group-data-expanded:rotate-180" />
 			</Popover.Trigger>
 			<Popover.Portal>

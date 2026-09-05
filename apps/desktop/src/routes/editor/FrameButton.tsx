@@ -3,6 +3,7 @@ import { Tabs as KTabs } from "@kobalte/core/tabs";
 import { cx } from "cva";
 import { type Component, For, type JSX, Show } from "solid-js";
 import { Dynamic } from "solid-js/web";
+import { useI18n } from "~/i18n";
 import type { FrameConfiguration, FrameStyle } from "~/utils/tauri";
 import IconCapChevronDown from "~icons/cap/chevron-down";
 import IconCapCircleCheck from "~icons/cap/circle-check";
@@ -181,6 +182,7 @@ function FrameSettings() {
 }
 
 export function FrameButton() {
+	const { t } = useI18n();
 	const { project } = useEditorContext();
 
 	const activeStyle = () =>
@@ -193,7 +195,7 @@ export function FrameButton() {
 		<KPopover placement="bottom-start" gutter={8} fitViewport>
 			<EditorButton<typeof KPopover.Trigger>
 				as={KPopover.Trigger}
-				tooltipText="Add a frame"
+				tooltipText={t("editor.addFrame")}
 				leftIcon={
 					<Dynamic
 						component={hasFrame() ? activeStyle().icon : IconLucideAppWindowMac}
@@ -202,7 +204,7 @@ export function FrameButton() {
 				}
 				rightIcon={<IconCapChevronDown />}
 			>
-				{hasFrame() ? activeStyle().label : "Frame"}
+				{hasFrame() ? activeStyle().label : t("editor.frame")}
 			</EditorButton>
 			<KPopover.Portal>
 				<KPopover.Content

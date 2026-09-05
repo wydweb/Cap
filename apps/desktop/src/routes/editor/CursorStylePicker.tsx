@@ -4,6 +4,7 @@ import { type as ostype } from "@tauri-apps/plugin-os";
 import { createMemo, For, Show } from "solid-js";
 import { Toggle } from "~/components/Toggle";
 import Tooltip from "~/components/Tooltip";
+import { useI18n } from "~/i18n";
 import type { CursorRippleConfig, CursorType } from "~/utils/tauri";
 import IconLucideMousePointerClick from "~icons/lucide/mouse-pointer-click";
 import macArrow from "../../../../../crates/cursor-info/assets/mac/arrow.svg?raw";
@@ -140,6 +141,7 @@ export function CursorStylePicker() {
 }
 
 export function CursorRippleSection() {
+	const { t } = useI18n();
 	const { project, setProject } = useEditorContext();
 
 	const ripple = () => project.cursor.ripple ?? DEFAULT_CURSOR_RIPPLE;
@@ -149,7 +151,7 @@ export function CursorRippleSection() {
 	return (
 		<KCollapsible open={ripple().enabled}>
 			<Field
-				name="Click Ripple"
+				name={t("editor.clickRipple")}
 				icon={<IconLucideMousePointerClick class="size-4" />}
 				value={
 					<Toggle
@@ -160,13 +162,13 @@ export function CursorRippleSection() {
 			/>
 			<KCollapsible.Content class="overflow-hidden border-b opacity-0 transition-opacity border-gray-3 animate-collapsible-up data-expanded:animate-collapsible-down data-expanded:opacity-100">
 				<div class="flex flex-col gap-4 pt-4 pb-6">
-					<Field name="Color">
+					<Field name={t("editor.color")}>
 						<RgbInput
 							value={ripple().color}
 							onChange={(color) => updateRipple({ color })}
 						/>
 					</Field>
-					<Field name="Strength">
+					<Field name={t("editor.strength")}>
 						<Slider
 							value={[Math.round(ripple().strength * 100)]}
 							onChange={(v) => updateRipple({ strength: v[0] / 100 })}
@@ -176,7 +178,7 @@ export function CursorRippleSection() {
 							formatTooltip={(v) => `${Math.round(v)}%`}
 						/>
 					</Field>
-					<Field name="Size">
+					<Field name={t("editor.size")}>
 						<Slider
 							value={[Math.round(ripple().size * 100)]}
 							onChange={(v) => updateRipple({ size: v[0] / 100 })}
@@ -186,7 +188,7 @@ export function CursorRippleSection() {
 							formatTooltip={(v) => `${Math.round(v)}%`}
 						/>
 					</Field>
-					<Field name="Duration">
+					<Field name={t("editor.duration")}>
 						<Slider
 							value={[ripple().duration]}
 							onChange={(v) => updateRipple({ duration: v[0] })}

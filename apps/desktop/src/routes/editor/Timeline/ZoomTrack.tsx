@@ -13,6 +13,7 @@ import {
 	Show,
 } from "solid-js";
 import { produce } from "solid-js/store";
+import { useI18n } from "~/i18n";
 import { generalSettingsStore } from "~/store";
 import { commands } from "~/utils/tauri";
 import { useEditorContext } from "../context";
@@ -40,6 +41,7 @@ export function ZoomTrack(props: {
 	onDragStateChanged: (v: ZoomSegmentDragState) => void;
 	handleUpdatePlayhead: (e: MouseEvent) => void;
 }) {
+	const { t } = useI18n();
 	const {
 		project,
 		setProject,
@@ -346,7 +348,9 @@ export function ZoomTrack(props: {
 						};
 
 						const zoomModeLabel = () =>
-							segment().mode === "auto" ? "Automatic Zoom" : "Manual Zoom";
+							segment().mode === "auto"
+								? t("editor.automaticZoom")
+								: t("editor.manualZoom");
 
 						const zoomSegments = () => project.timeline?.zoomSegments ?? [];
 

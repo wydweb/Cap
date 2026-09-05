@@ -5,9 +5,16 @@ import { debounce } from "@solid-primitives/scheduled";
 import { Menu } from "@tauri-apps/api/menu";
 import { type as ostype } from "@tauri-apps/plugin-os";
 import { cx } from "cva";
-import { createEffect, createSignal, onMount, Show } from "solid-js";
+import {
+	createEffect,
+	createMemo,
+	createSignal,
+	onMount,
+	Show,
+} from "solid-js";
 
 import Tooltip from "~/components/Tooltip";
+import { useI18n } from "~/i18n";
 import { captionsStore } from "~/store/captions";
 import { commands } from "~/utils/tauri";
 import AspectRatioSelect from "./AspectRatioSelect";
@@ -41,6 +48,7 @@ import { useEditorShortcuts } from "./useEditorShortcuts";
 import { formatTime } from "./utils";
 
 export function PlayerContent() {
+	const { t } = useI18n();
 	const {
 		project,
 		editorInstance,
@@ -55,16 +63,25 @@ export function PlayerContent() {
 		setPreviewQuality,
 	} = useEditorContext();
 
-	const previewOptions = [
-		{ label: "Full", value: "full" as EditorPreviewQuality },
-		{ label: "Half", value: "half" as EditorPreviewQuality },
-		{ label: "Quarter", value: "quarter" as EditorPreviewQuality },
-	];
+	const previewOptions = createMemo(() => [
+		{
+			label: t("editor.previewQualityFull"),
+			value: "full" as EditorPreviewQuality,
+		},
+		{
+			label: t("editor.previewQualityHalf"),
+			value: "half" as EditorPreviewQuality,
+		},
+		{
+			label: t("editor.previewQualityQuarter"),
+			value: "quarter" as EditorPreviewQuality,
+		},
+	]);
 
 	const zoomHint = () =>
 		ostype() === "windows"
-			? "Hold Ctrl and scroll, or press Ctrl +/- to zoom"
-			: "Pinch, or press Cmd +/- to zoom";
+			? t("editor.zoomHintWindows")
+			: t("editor.zoomHintMac");
 
 	// Load captions on mount
 	onMount(async () => {
@@ -291,21 +308,23 @@ export function PlayerContent() {
 				<div class="flex items-center gap-3">
 					<AspectRatioSelect />
 					<EditorButton
-						tooltipText="Crop Video"
+						tooltipText={t("editor.cropVideo")}
 						onClick={cropDialogHandler}
 						leftIcon={<IconCapCrop class="w-5 text-gray-12" />}
 					>
-						Crop
+						{t("editor.crop")}
 					</EditorButton>
 					<FrameButton />
 				</div>
 				<div class="flex items-center gap-2">
-					<span class="text-xs font-medium text-gray-11">Preview quality</span>
+					<span class="text-xs font-medium text-gray-11">
+						{t("editor.previewQuality")}
+					</span>
 					<KSelect<{ label: string; value: EditorPreviewQuality }>
-						options={previewOptions}
+						options={previewOptions()}
 						optionValue="value"
 						optionTextValue="label"
-						value={previewOptions.find(
+						value={previewOptions().find(
 							(option) => option.value === previewQuality(),
 						)}
 						onChange={(next) => {
@@ -332,7 +351,8 @@ export function PlayerContent() {
 								value: EditorPreviewQuality;
 							}> class="flex-1 text-left truncate">
 								{(state) =>
-									state.selectedOption()?.label ?? "Select preview quality"
+									state.selectedOption()?.label ??
+									t("editor.selectPreviewQuality")
 								}
 							</KSelect.Value>
 							<KSelect.Icon>

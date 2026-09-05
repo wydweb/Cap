@@ -437,37 +437,47 @@ const DEFAULT_MOTION_BLUR = 1.0;
 const CURSOR_ANIMATION_STYLE_OPTIONS = [
 	{
 		value: "slow",
-		label: "Slow",
-		description: "Relaxed easing with a gentle follow and higher inertia.",
+		labelKey: "editor.cursorStyleSlow",
+		descriptionKey: "editor.cursorStyleSlowDescription",
 		preset: { tension: 200, mass: 2.25, friction: 40 },
 	},
 	{
 		value: "smooth",
-		label: "Smooth",
-		description: "Ultra-smooth cinematic feel with high damping.",
+		labelKey: "editor.cursorStyleSmooth",
+		descriptionKey: "editor.cursorStyleSmoothDescription",
 		preset: { tension: 80, mass: 2.5, friction: 28 },
 	},
 	{
 		value: "mellow",
-		label: "Mellow",
-		description: "Balanced smoothing for everyday tutorials and walkthroughs.",
+		labelKey: "editor.cursorStyleMellow",
+		descriptionKey: "editor.cursorStyleMellowDescription",
 		preset: { tension: 470, mass: 3, friction: 70 },
 	},
 	{
 		value: "fast",
-		label: "Fast",
-		description: "Quick, responsive smoothing for fast-paced content.",
+		labelKey: "editor.cursorStyleFast",
+		descriptionKey: "editor.cursorStyleFastDescription",
 		preset: { tension: 380, mass: 1.0, friction: 30 },
 	},
 	{
 		value: "custom",
-		label: "Custom",
-		description: "Tune tension, friction, and mass manually for full control.",
+		labelKey: "editor.cursorStyleCustom",
+		descriptionKey: "editor.cursorStyleCustomDescription",
 	},
 ] satisfies Array<{
 	value: CursorAnimationStyle;
-	label: string;
-	description: string;
+	labelKey:
+		| "editor.cursorStyleSlow"
+		| "editor.cursorStyleSmooth"
+		| "editor.cursorStyleMellow"
+		| "editor.cursorStyleFast"
+		| "editor.cursorStyleCustom";
+	descriptionKey:
+		| "editor.cursorStyleSlowDescription"
+		| "editor.cursorStyleSmoothDescription"
+		| "editor.cursorStyleMellowDescription"
+		| "editor.cursorStyleFastDescription"
+		| "editor.cursorStyleCustomDescription";
 	preset?: CursorPresetValues;
 }>;
 
@@ -916,10 +926,10 @@ export function ConfigSidebar() {
 											<RadioGroup.ItemControl class="mt-1 size-4 rounded-full border border-gray-7 data-checked:border-blue-9 data-checked:bg-blue-9" />
 											<div class="flex flex-col text-left">
 												<span class="text-sm font-medium text-gray-12">
-													{option.label}
+													{t(option.labelKey)}
 												</span>
 												<span class="text-xs text-gray-11">
-													{option.description}
+													{t(option.descriptionKey)}
 												</span>
 											</div>
 										</RadioGroup.ItemLabel>
@@ -943,7 +953,7 @@ export function ConfigSidebar() {
 							<KCollapsible.Content class="overflow-hidden border-b opacity-0 transition-opacity border-gray-3 animate-collapsible-up data-expanded:animate-collapsible-down data-expanded:opacity-100">
 								{/* if Content has padding or margin the animation doesn't look as good */}
 								<div class="flex flex-col gap-4 pt-4 pb-6">
-									<Field name="Tension">
+									<Field name={t("editor.tension")}>
 										<Slider
 											value={[project.cursor.tension]}
 											onChange={(v) => setCursorPhysics("tension", v[0])}
@@ -952,7 +962,7 @@ export function ConfigSidebar() {
 											step={1}
 										/>
 									</Field>
-									<Field name="Friction">
+									<Field name={t("editor.friction")}>
 										<Slider
 											value={[project.cursor.friction]}
 											onChange={(v) => setCursorPhysics("friction", v[0])}
@@ -961,7 +971,7 @@ export function ConfigSidebar() {
 											step={0.1}
 										/>
 									</Field>
-									<Field name="Mass">
+									<Field name={t("editor.mass")}>
 										<Slider
 											value={[project.cursor.mass]}
 											onChange={(v) => setCursorPhysics("mass", v[0])}

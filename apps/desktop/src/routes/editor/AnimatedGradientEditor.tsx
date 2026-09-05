@@ -11,6 +11,7 @@ import {
 	Show,
 } from "solid-js";
 import { produce } from "solid-js/store";
+import { useI18n } from "~/i18n";
 import { animatedGradientsStore } from "~/store";
 import type { OrganizationBrandColorSwatch } from "~/utils/organization-branding";
 import {
@@ -63,9 +64,13 @@ function palettePreview(config: AnimatedGradientConfig) {
 	return `linear-gradient(90deg, ${stops.join(",")})`;
 }
 
-function controlValue(control: AnimatedGradientControl, value: number) {
+function controlValue(
+	control: AnimatedGradientControl,
+	value: number,
+	stillLabel = "Still",
+) {
 	if (control.key === "direction") return `${Math.round(value)}°`;
-	if (control.key === MOTION_KEY && value === 0) return "Still";
+	if (control.key === MOTION_KEY && value === 0) return stillLabel;
 	return control.step < 1 ? value.toFixed(1) : String(Math.round(value));
 }
 
@@ -149,6 +154,7 @@ function ControlRow(props: {
 	value: number;
 	onChange: (value: number) => void;
 }) {
+	const { t } = useI18n();
 	return (
 		<div class="flex items-center gap-3">
 			<span class="w-24 shrink-0 truncate text-xs text-gray-11">
@@ -160,12 +166,14 @@ function ControlRow(props: {
 				minValue={props.control.min}
 				maxValue={props.control.max}
 				step={props.control.step}
-				formatTooltip={(value) => controlValue(props.control, value)}
+				formatTooltip={(value) =>
+					controlValue(props.control, value, t("editor.still"))
+				}
 				aria-label={props.control.label}
 				onChange={([next]) => props.onChange(next)}
 			/>
 			<span class="w-10 shrink-0 text-right text-xs text-gray-11 tabular-nums">
-				{controlValue(props.control, props.value)}
+				{controlValue(props.control, props.value, t("editor.still"))}
 			</span>
 		</div>
 	);
@@ -174,6 +182,7 @@ function ControlRow(props: {
 export function AnimatedGradientEditor(props: {
 	brandColorSwatches?: OrganizationBrandColorSwatch[];
 }) {
+	const { t } = useI18n();
 	const { project, setProject, projectHistory } = useEditorContext();
 	const catalog = createQuery(() => ({
 		queryKey: ["animated-gradient-catalog"],
@@ -261,7 +270,7 @@ export function AnimatedGradientEditor(props: {
 			)
 				applyConfig(next);
 		} catch {
-			if (!disposed) setError("Could not create a random gradient. Try again.");
+			if (!disposed) setError(t("editor.randomGradientFailed"));
 		} finally {
 			if (!disposed) setRandomizing(false);
 		}
@@ -367,8 +376,8 @@ export function AnimatedGradientEditor(props: {
 			if (!disposed)
 				setError(
 					error instanceof SavedGradientLimitError
-						? `You can save up to ${MAX_SAVED} gradients. Delete one to add another.`
-						: "Could not save this gradient. Try again.",
+						? t("editor.gradientLimit", { count: MAX_SAVED })
+						: t("editor.gradientSaveFailed"),
 				);
 		} finally {
 			if (!disposed) setSaving(false);
@@ -387,7 +396,7 @@ export function AnimatedGradientEditor(props: {
 			if (disposed) return;
 			await library.refetch();
 		} catch {
-			if (!disposed) setError("Could not delete this gradient. Try again.");
+			if (!disposed) setError(t("editor.gradientDeleteFailed"));
 		} finally {
 			if (!disposed) setDeletingId(null);
 		}
@@ -407,12 +416,12 @@ export function AnimatedGradientEditor(props: {
 					</Show>
 
 					<Field
-						name="Presets"
+						name={t("editor.presets")}
 						value={
 							<HeaderButton
 								icon={<IconLucideSave />}
-								label="Save"
-								title="Save the current gradient"
+								label={t("editor.save")}
+								title={t("editor.save")}
 								pressed={saveOpen()}
 								disabled={
 									saving() ||
@@ -428,8 +437,8 @@ export function AnimatedGradientEditor(props: {
 							<div class="grid grid-cols-7 gap-2">
 								<button
 									type="button"
-									title="Randomize"
-									aria-label="Randomize gradient"
+									title={t("editor.randomize")}
+									aria-label={t("editor.randomizeGradient")}
 									disabled={randomizing()}
 									class={cx(
 										swatchClass,
@@ -459,8 +468,8 @@ export function AnimatedGradientEditor(props: {
 									<Input
 										ref={(element) => queueMicrotask(() => element.focus())}
 										class="min-w-0 flex-1"
-										placeholder="Name this gradient"
-										aria-label="Saved gradient name"
+										placeholder={t("editor.nameGradient")}
+										aria-label={t("editor.savedGradientName")}
 										maxLength={80}
 										value={presetName()}
 										disabled={saving()}
@@ -483,11 +492,11 @@ export function AnimatedGradientEditor(props: {
 										disabled={!presetName().trim() || saving()}
 										onClick={() => void savePreset()}
 									>
-										{saving() ? "Saving…" : "Save"}
+										{saving() ? t("editor.saving") : t("editor.save")}
 									</button>
 									<button
 										type="button"
-										aria-label="Cancel"
+										aria-label={t("common.cancel")}
 										class="rounded-md p-1.5 text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12"
 										onClick={closeSave}
 									>
@@ -496,7 +505,9 @@ export function AnimatedGradientEditor(props: {
 								</div>
 							</Show>
 							<Show when={savedPresets().length > 0}>
-								<span class="text-[11px] text-gray-10">Saved</span>
+								<span class="text-[11px] text-gray-10">
+									{t("editor.saved")}
+								</span>
 								<div class="grid grid-cols-7 gap-2">
 									<For each={savedPresets()}>
 										{(preset) => (
@@ -516,8 +527,10 @@ export function AnimatedGradientEditor(props: {
 												<Show when={isSelected(preset)}>
 													<button
 														type="button"
-														title="Delete"
-														aria-label={`Delete ${preset.name}`}
+														title={t("common.delete")}
+														aria-label={t("editor.deleteNamed", {
+															name: preset.name,
+														})}
 														disabled={deletingId() !== null}
 														class="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-gray-12 text-gray-1 shadow-sm transition-colors hover:bg-red-11 disabled:opacity-40"
 														onClick={() => void deletePreset(preset.id)}
@@ -536,12 +549,12 @@ export function AnimatedGradientEditor(props: {
 					<div class="w-full border-t border-dashed border-gray-5" />
 
 					<Field
-						name="Colours"
+						name={t("editor.colors")}
 						value={
 							<HeaderButton
 								icon={<IconLucidePlus />}
-								label="Add"
-								title="Add a colour"
+								label={t("editor.add")}
+								title={t("editor.addColor")}
 								disabled={current().colorStops.length >= MAX_STOPS}
 								onClick={() =>
 									addStop(largestGapPosition(current().colorStops))
@@ -581,7 +594,9 @@ export function AnimatedGradientEditor(props: {
 											return (
 												<button
 													type="button"
-													aria-label={`Colour ${index + 1}`}
+													aria-label={t("editor.colorNumber", {
+														number: index + 1,
+													})}
 													aria-pressed={selected()}
 													class={cx(
 														"absolute top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full p-0.5 shadow-md outline-hidden transition-[width,height] focus-visible:ring-2 focus-visible:ring-blue-9",
@@ -656,8 +671,10 @@ export function AnimatedGradientEditor(props: {
 											</span>
 											<button
 												type="button"
-												title="Remove colour"
-												aria-label={`Remove colour ${stopIndex() + 1}`}
+												title={t("editor.removeColor")}
+												aria-label={t("editor.removeColorNumber", {
+													number: stopIndex() + 1,
+												})}
 												disabled={current().colorStops.length <= MIN_STOPS}
 												class="rounded-md p-1.5 text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12 disabled:opacity-30 disabled:hover:bg-transparent"
 												onClick={() => removeStop(stopIndex())}
@@ -687,7 +704,7 @@ export function AnimatedGradientEditor(props: {
 
 					<Show when={motionControl()}>
 						{(control) => (
-							<Subfield name="Motion" class="gap-4">
+							<Subfield name={t("editor.motion")} class="gap-4">
 								<div class="flex min-w-0 flex-1 items-center gap-3">
 									<Slider
 										class="min-w-0 flex-1"
@@ -695,8 +712,10 @@ export function AnimatedGradientEditor(props: {
 										minValue={control().min}
 										maxValue={control().max}
 										step={control().step}
-										formatTooltip={(value) => controlValue(control(), value)}
-										aria-label="Motion speed"
+										formatTooltip={(value) =>
+											controlValue(control(), value, t("editor.still"))
+										}
+										aria-label={t("editor.motionSpeed")}
 										onChange={([next]) =>
 											updateConfig((value) => {
 												value[MOTION_KEY] = next;
@@ -704,7 +723,11 @@ export function AnimatedGradientEditor(props: {
 										}
 									/>
 									<span class="w-10 shrink-0 text-right text-xs text-gray-11 tabular-nums">
-										{controlValue(control(), current()[MOTION_KEY])}
+										{controlValue(
+											control(),
+											current()[MOTION_KEY],
+											t("editor.still"),
+										)}
 									</span>
 								</div>
 							</Subfield>
@@ -716,14 +739,14 @@ export function AnimatedGradientEditor(props: {
 					<KCollapsible open={fineTuneOpen()} onOpenChange={setFineTuneOpen}>
 						<div class="flex items-center">
 							<KCollapsible.Trigger class="group flex flex-1 items-center gap-1.5 text-sm font-medium text-gray-12 outline-hidden">
-								Fine-tune
+								{t("editor.fineTune")}
 								<IconCapChevronDown class="size-3.5 text-gray-10 transition-transform duration-200 group-data-expanded:rotate-180" />
 							</KCollapsible.Trigger>
 							<Show when={fineTuneOpen()}>
 								<HeaderButton
 									icon={<IconLucideRotateCcw />}
-									label="Reset"
-									title="Reset fine-tune settings"
+									label={t("editor.reset")}
+									title={t("editor.resetFineTune")}
 									onClick={resetFineTune}
 								/>
 							</Show>

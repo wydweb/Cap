@@ -3,7 +3,7 @@ import { Tabs as KTabs } from "@kobalte/core/tabs";
 import { cx } from "cva";
 import { type Component, For, type JSX, Show } from "solid-js";
 import { Dynamic } from "solid-js/web";
-import { useI18n } from "~/i18n";
+import { type MessageKey, useI18n } from "~/i18n";
 import type { FrameConfiguration, FrameStyle } from "~/utils/tauri";
 import IconCapChevronDown from "~icons/cap/chevron-down";
 import IconCapCircleCheck from "~icons/cap/circle-check";
@@ -24,38 +24,38 @@ const DEFAULT_FRAME_CONFIG: FrameConfiguration = {
 
 const FRAME_STYLES: Array<{
 	value: FrameStyle;
-	label: string;
-	description: string;
+	labelKey: MessageKey;
+	descriptionKey: MessageKey;
 	icon: Component<{ class?: string }>;
 }> = [
 	{
 		value: "none",
-		label: "None",
-		description: "Show the recording as-is",
+		labelKey: "editor.frameNone",
+		descriptionKey: "editor.frameNoneDescription",
 		icon: IconLucideBan,
 	},
 	{
 		value: "macOS",
-		label: "macOS",
-		description: "Window chrome with traffic lights",
+		labelKey: "editor.frameMacOS",
+		descriptionKey: "editor.frameMacOSDescription",
 		icon: IconLucideAppWindowMac,
 	},
 	{
 		value: "windows",
-		label: "Windows",
-		description: "Title bar with window controls",
+		labelKey: "editor.frameWindows",
+		descriptionKey: "editor.frameWindowsDescription",
 		icon: IconLucideAppWindow,
 	},
 	{
 		value: "browser",
-		label: "Browser",
-		description: "Browser chrome with address bar",
+		labelKey: "editor.frameBrowser",
+		descriptionKey: "editor.frameBrowserDescription",
 		icon: IconLucideGlobe,
 	},
 	{
 		value: "macbook",
-		label: "MacBook",
-		description: "Laptop bezel around the recording",
+		labelKey: "editor.frameMacBook",
+		descriptionKey: "editor.frameMacBookDescription",
 		icon: IconLucideLaptop,
 	},
 ];
@@ -73,6 +73,7 @@ function SettingRow(props: { name: string; children: JSX.Element }) {
 }
 
 function FrameSettings() {
+	const { t } = useI18n();
 	const { project, setProject } = useEditorContext();
 
 	const style = () => project.background.frame?.style ?? "none";
@@ -85,9 +86,11 @@ function FrameSettings() {
 	return (
 		<>
 			<div class="flex flex-col gap-0.5 px-4 pt-3.5 pb-3 border-b shrink-0 border-gray-3">
-				<span class="text-[0.8125rem] font-semibold text-gray-12">Frame</span>
+				<span class="text-[0.8125rem] font-semibold text-gray-12">
+					{t("editor.frame")}
+				</span>
 				<span class="text-[0.6875rem] leading-snug text-gray-10">
-					Wrap your recording in a window or device frame.
+					{t("editor.frameDescription")}
 				</span>
 			</div>
 			<div class="flex flex-col gap-0.5 p-1.5">
@@ -112,10 +115,10 @@ function FrameSettings() {
 								</span>
 								<span class="flex flex-col flex-1 min-w-0">
 									<span class="text-[0.8125rem] font-medium leading-tight text-gray-12">
-										{option.label}
+										{t(option.labelKey)}
 									</span>
 									<span class="text-[0.6875rem] leading-snug text-gray-10">
-										{option.description}
+										{t(option.descriptionKey)}
 									</span>
 								</span>
 								<Show when={selected()}>
@@ -129,7 +132,7 @@ function FrameSettings() {
 			<Show when={style() !== "none" && project.background.frame}>
 				{(frame) => (
 					<div class="flex flex-col gap-3 p-3 border-t border-gray-3">
-						<SettingRow name="Theme">
+						<SettingRow name={t("editor.theme")}>
 							<KTabs
 								class="w-40"
 								value={frame().theme}
@@ -139,10 +142,10 @@ function FrameSettings() {
 							>
 								<KTabs.List class="flex relative flex-row items-center h-8 rounded-lg border border-gray-3">
 									<KTabs.Trigger value="light" class={THEME_TAB_TRIGGER_CLASS}>
-										Light
+										{t("settings.light")}
 									</KTabs.Trigger>
 									<KTabs.Trigger value="dark" class={THEME_TAB_TRIGGER_CLASS}>
-										Dark
+										{t("settings.dark")}
 									</KTabs.Trigger>
 									<KTabs.Indicator class="overflow-hidden absolute inset-0 rounded-lg transition-transform flex p-px peer-focus-visible:outline-solid outline-2 outline-blue-9 outline-offset-2">
 										<div class="flex-1 bg-gray-3" />
@@ -162,11 +165,11 @@ function FrameSettings() {
 							</SettingRow>
 						</Show>
 						<Show when={frame().style === "macOS"}>
-							<SettingRow name="Title">
+							<SettingRow name={t("editor.title")}>
 								<div class="w-40">
 									<Input
 										value={frame().title}
-										placeholder="Window title"
+										placeholder={t("editor.windowTitle")}
 										onInput={(e) =>
 											updateFrame({ title: e.currentTarget.value })
 										}
@@ -204,7 +207,7 @@ export function FrameButton() {
 				}
 				rightIcon={<IconCapChevronDown />}
 			>
-				{hasFrame() ? activeStyle().label : t("editor.frame")}
+				{hasFrame() ? t(activeStyle().labelKey) : t("editor.frame")}
 			</EditorButton>
 			<KPopover.Portal>
 				<KPopover.Content

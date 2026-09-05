@@ -82,7 +82,16 @@ const trackIcons: Record<TimelineTrackType, () => JSX.Element> = {
 
 type TrackDefinition = {
 	type: TimelineTrackType;
-	label: string;
+	labelKey:
+		| "editor.clips"
+		| "editor.captions"
+		| "editor.keyboard"
+		| "editor.text"
+		| "editor.mask"
+		| "editor.audio"
+		| "editor.zoom"
+		| "editor.scene"
+		| "editor.threeD";
 	icon: () => JSX.Element;
 	locked: boolean;
 };
@@ -90,55 +99,55 @@ type TrackDefinition = {
 const trackDefinitions: TrackDefinition[] = [
 	{
 		type: "clip",
-		label: "Clip",
+		labelKey: "editor.clips",
 		icon: trackIcons.clip,
 		locked: true,
 	},
 	{
 		type: "caption",
-		label: "Captions",
+		labelKey: "editor.captions",
 		icon: trackIcons.caption,
 		locked: false,
 	},
 	{
 		type: "keyboard",
-		label: "Keyboard",
+		labelKey: "editor.keyboard",
 		icon: trackIcons.keyboard,
 		locked: false,
 	},
 	{
 		type: "text",
-		label: "Text",
+		labelKey: "editor.text",
 		icon: trackIcons.text,
 		locked: false,
 	},
 	{
 		type: "mask",
-		label: "Mask",
+		labelKey: "editor.mask",
 		icon: trackIcons.mask,
 		locked: false,
 	},
 	{
 		type: "audio",
-		label: "Audio",
+		labelKey: "editor.audio",
 		icon: trackIcons.audio,
 		locked: false,
 	},
 	{
 		type: "zoom",
-		label: "Zoom",
+		labelKey: "editor.zoom",
 		icon: trackIcons.zoom,
 		locked: true,
 	},
 	{
 		type: "scene",
-		label: "Scene",
+		labelKey: "editor.scene",
 		icon: trackIcons.scene,
 		locked: false,
 	},
 	{
 		type: "3d",
-		label: "3D",
+		labelKey: "editor.threeD",
 		icon: trackIcons["3d"],
 		locked: false,
 	},
@@ -206,6 +215,7 @@ export function Timeline(props: {
 	const trackOptions = createMemo(() =>
 		trackDefinitions.map((definition) => ({
 			...definition,
+			label: t(definition.labelKey),
 			active:
 				definition.type === "caption"
 					? trackState().caption
@@ -1065,9 +1075,7 @@ export function Timeline(props: {
 			);
 
 			if (result.segments.length < 1) {
-				toast.error(
-					"No captions were generated. The audio might be too quiet or unclear.",
-				);
+				toast.error(t("editor.noCaptionsGenerated"));
 				return;
 			}
 
@@ -1084,11 +1092,13 @@ export function Timeline(props: {
 
 			setEditorState("timeline", "tracks", "caption", true);
 			setEditorState("captions", "isStale", false);
-			toast.success("Captions generated successfully!");
+			toast.success(t("editor.captionsGenerated"));
 		} catch (error) {
 			console.error("Error generating captions:", error);
 			const errorMessage = getCaptionGenerationErrorMessage(error);
-			toast.error(`Failed to generate captions: ${errorMessage}`);
+			toast.error(
+				t("editor.captionGenerationFailed", { message: errorMessage }),
+			);
 		} finally {
 			setEditorState("captions", "isGenerating", false);
 		}
@@ -1468,8 +1478,8 @@ export function Timeline(props: {
 											? () => handleClearTrackSegments("3d")
 											: undefined
 									}
-									deleteLabel="Clear all"
-									deleteTitle="Delete all 3D segments"
+									deleteLabel={t("editor.clearAll")}
+									deleteTitle={t("editor.deleteAll3D")}
 								>
 									<ThreeDTrack
 										onDragStateChanged={(v) => {
@@ -1518,6 +1528,7 @@ function TrackRow(props: {
 	deleteTitle?: string;
 	onContextMenu?: (e: MouseEvent) => void;
 }) {
+	const { t } = useI18n();
 	return (
 		<div class="flex items-stretch gap-2" onContextMenu={props.onContextMenu}>
 			<div
@@ -1541,11 +1552,11 @@ function TrackRow(props: {
 							props.onDelete?.();
 						}}
 						onMouseDown={(e) => e.stopPropagation()}
-						title={props.deleteTitle ?? "Delete track"}
+						title={props.deleteTitle ?? t("editor.deleteTrack")}
 					>
 						<IconCapTrash class="size-4" />
 						<span class="text-[0.625rem] leading-none font-medium">
-							{props.deleteLabel ?? "Delete"}
+							{props.deleteLabel ?? t("common.delete")}
 						</span>
 					</button>
 				</Show>

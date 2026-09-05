@@ -399,7 +399,7 @@ export function PlayerContent() {
 					>
 						<IconCapPrev class="text-gray-12 size-3" />
 					</button>
-					<Tooltip kbd={["Space"]} content="Play/Pause video">
+					<Tooltip kbd={["Space"]} content={t("editor.playPauseVideo")}>
 						<button
 							type="button"
 							onClick={handlePlayPauseClick}
@@ -427,7 +427,7 @@ export function PlayerContent() {
 				<div class="flex flex-row flex-1 gap-4 justify-end items-center">
 					<div class="flex-1" />
 					<EditorButton<typeof KToggleButton>
-						tooltipText="Toggle Split"
+						tooltipText={t("editor.toggleSplit")}
 						kbd={["S"]}
 						pressed={editorState.timeline.interactMode === "split"}
 						onChange={(v: boolean) =>
@@ -446,7 +446,7 @@ export function PlayerContent() {
 						}
 					/>
 					<div class="w-px h-8 rounded-full bg-gray-4" />
-					<Tooltip kbd={["meta", "-"]} content="Zoom out">
+					<Tooltip kbd={["meta", "-"]} content={t("editor.zoomOut")}>
 						<IconCapZoomOut
 							onClick={() => {
 								editorState.timeline.transform.updateZoom(
@@ -457,7 +457,7 @@ export function PlayerContent() {
 							class="text-gray-12 size-5 will-change-[opacity] transition-opacity hover:opacity-70"
 						/>
 					</Tooltip>
-					<Tooltip kbd={["meta", "+"]} content="Zoom in">
+					<Tooltip kbd={["meta", "+"]} content={t("editor.zoomIn")}>
 						<IconCapZoomIn
 							onClick={() => {
 								editorState.timeline.transform.updateZoom(
@@ -489,9 +489,9 @@ export function PlayerContent() {
 							);
 						}}
 						formatTooltip={() =>
-							`${editorState.timeline.transform.zoom.toFixed(
-								0,
-							)} seconds visible`
+							t("editor.secondsVisible", {
+								seconds: editorState.timeline.transform.zoom.toFixed(0),
+							})
 						}
 					/>
 				</div>
@@ -516,6 +516,7 @@ const gridStyle = {
 };
 
 function PreviewCanvas() {
+	const { t } = useI18n();
 	const { latestFrame, canvasControls, performanceMode, setPerformanceMode } =
 		useEditorContext();
 
@@ -527,7 +528,7 @@ function PreviewCanvas() {
 			items: [
 				{
 					id: "performance-mode",
-					text: performanceMode() ? "✓ Performance Mode" : "Performance Mode",
+					text: `${performanceMode() ? "✓ " : ""}${t("editor.performanceMode")}`,
 					action: () => setPerformanceMode(!performanceMode()),
 				},
 			],

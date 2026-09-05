@@ -92,7 +92,7 @@ export function PresetsDropdown() {
 														onSelect={async () => {
 															await presets.saveToPreset(i(), project);
 															toast.success(
-																`Saved settings to "${preset.name}"`,
+																t("editor.presetSaved", { name: preset.name }),
 															);
 														}}
 													>

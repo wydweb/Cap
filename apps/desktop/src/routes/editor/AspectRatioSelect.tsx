@@ -1,7 +1,7 @@
 import { Select as KSelect } from "@kobalte/core/select";
 import { createSignal, Show } from "solid-js";
 import Tooltip from "~/components/Tooltip";
-import { useI18n } from "~/i18n";
+import { type MessageKey, useI18n } from "~/i18n";
 import type { AspectRatio } from "~/utils/tauri";
 import { useEditorContext } from "./context";
 import { ASPECT_RATIOS } from "./projectConfig";
@@ -18,6 +18,16 @@ function AspectRatioSelect() {
 	const { project, setProject } = useEditorContext();
 	const [open, setOpen] = createSignal(false);
 	let triggerSelect: HTMLDivElement | undefined;
+	const label = (ratio: AspectRatio) => {
+		const keys: Record<AspectRatio, MessageKey> = {
+			wide: "editor.aspectRatioWide",
+			vertical: "editor.aspectRatioVertical",
+			square: "editor.aspectRatioSquare",
+			classic: "editor.aspectRatioClassic",
+			tall: "editor.aspectRatioTall",
+		};
+		return t(keys[ratio]);
+	};
 
 	return (
 		<Tooltip content={t("captureArea.aspectRatio")}>
@@ -46,7 +56,7 @@ function AspectRatioSelect() {
 							<KSelect.ItemLabel class="flex-1">
 								{props.item.rawValue === "auto"
 									? t("editor.auto")
-									: ASPECT_RATIOS[props.item.rawValue].name}
+									: label(props.item.rawValue)}
 								<Show when={item()}>
 									{(item) => (
 										<span class="text-gray-11">
@@ -79,9 +89,7 @@ function AspectRatioSelect() {
 						{(state) => {
 							const text = () => {
 								const option = state.selectedOption();
-								return option === "auto"
-									? t("editor.auto")
-									: ASPECT_RATIOS[option].name;
+								return option === "auto" ? t("editor.auto") : label(option);
 							};
 							return <>{text()}</>;
 						}}

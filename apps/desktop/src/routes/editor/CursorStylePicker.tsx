@@ -81,8 +81,11 @@ function CircleCursor() {
 }
 
 function CursorStyleCard(props: { style: CursorStyle; recorded: boolean }) {
+	const { t } = useI18n();
 	const label = () =>
-		props.style === "circle" ? "Circle" : CURSOR_FAMILIES[props.style].label;
+		props.style === "circle"
+			? t("editor.cursorCircle")
+			: CURSOR_FAMILIES[props.style].label;
 
 	const tile = () => (
 		<div class="flex h-[60px] w-full items-center justify-center rounded-[10px] border border-gray-3 bg-gray-2 transition-colors group-hover:border-gray-5 group-data-checked:border-blue-8 group-data-checked:bg-blue-3/40 group-data-checked:ring-1 group-data-checked:ring-blue-8 group-has-[input:focus-visible]:ring-2 group-has-[input:focus-visible]:ring-blue-8">
@@ -100,7 +103,7 @@ function CursorStyleCard(props: { style: CursorStyle; recorded: boolean }) {
 			<KRadioGroup.ItemInput class="sr-only" />
 			<KRadioGroup.ItemLabel class="flex cursor-pointer flex-col items-center gap-1.5">
 				<Show when={props.recorded} fallback={tile()}>
-					<Tooltip content="Recorded with this cursor" childClass="w-full">
+					<Tooltip content={t("editor.recordedWithCursor")} childClass="w-full">
 						{tile()}
 					</Tooltip>
 				</Show>
@@ -113,6 +116,7 @@ function CursorStyleCard(props: { style: CursorStyle; recorded: boolean }) {
 }
 
 export function CursorStylePicker() {
+	const { t } = useI18n();
 	const { project, setProject, meta } = useEditorContext();
 
 	const recorded = createMemo(() => recordedCursorFamily(meta()));
@@ -124,7 +128,7 @@ export function CursorStylePicker() {
 	});
 
 	return (
-		<Field name="Cursor Style" icon={<IconCapCursor />}>
+		<Field name={t("editor.cursorStyle")} icon={<IconCapCursor />}>
 			<KRadioGroup
 				class="grid grid-cols-4 gap-2"
 				value={selected()}

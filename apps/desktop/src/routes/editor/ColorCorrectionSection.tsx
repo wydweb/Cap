@@ -3,6 +3,7 @@ import { cx } from "cva";
 import { createSignal, For, Show } from "solid-js";
 import { produce } from "solid-js/store";
 import { Toggle } from "~/components/Toggle";
+import { type MessageKey, useI18n } from "~/i18n";
 import IconLucideGrip from "~icons/lucide/grip";
 import IconLucideMousePointer2 from "~icons/lucide/mouse-pointer-2";
 import IconLucideSlidersHorizontal from "~icons/lucide/sliders-horizontal";
@@ -20,21 +21,69 @@ import { Field, Slider } from "./ui";
 
 const ADJUST_SLIDERS: {
 	key: keyof ColorCorrectionValues;
-	label: string;
+	labelKey: MessageKey;
 	min: number;
 	max: number;
 	keepsPreset?: boolean;
 }[] = [
-	{ key: "intensity", label: "Strength", min: 0, max: 100, keepsPreset: true },
-	{ key: "exposure", label: "Exposure", min: -100, max: 100 },
-	{ key: "contrast", label: "Contrast", min: -100, max: 100 },
-	{ key: "saturation", label: "Saturation", min: -100, max: 100 },
-	{ key: "temperature", label: "Temperature", min: -100, max: 100 },
-	{ key: "tint", label: "Tint", min: -100, max: 100 },
-	{ key: "fade", label: "Fade", min: 0, max: 100 },
-	{ key: "splitTone", label: "Split Tone", min: -100, max: 100 },
-	{ key: "vignette", label: "Vignette", min: 0, max: 100 },
+	{
+		key: "intensity",
+		labelKey: "editor.strength",
+		min: 0,
+		max: 100,
+		keepsPreset: true,
+	},
+	{ key: "exposure", labelKey: "editor.exposure", min: -100, max: 100 },
+	{ key: "contrast", labelKey: "editor.contrast", min: -100, max: 100 },
+	{ key: "saturation", labelKey: "editor.saturation", min: -100, max: 100 },
+	{ key: "temperature", labelKey: "editor.temperature", min: -100, max: 100 },
+	{ key: "tint", labelKey: "editor.tint", min: -100, max: 100 },
+	{ key: "fade", labelKey: "editor.fade", min: 0, max: 100 },
+	{ key: "splitTone", labelKey: "editor.splitTone", min: -100, max: 100 },
+	{ key: "vignette", labelKey: "editor.vignette", min: 0, max: 100 },
 ];
+
+const COLOR_PRESET_MESSAGE_KEYS: Record<
+	string,
+	{ label: MessageKey; description: MessageKey }
+> = {
+	none: {
+		label: "editor.colorPresetNone",
+		description: "editor.colorPresetNoneDescription",
+	},
+	cinematic: {
+		label: "editor.colorPresetCinematic",
+		description: "editor.colorPresetCinematicDescription",
+	},
+	noir: {
+		label: "editor.colorPresetNoir",
+		description: "editor.colorPresetNoirDescription",
+	},
+	vintage: {
+		label: "editor.colorPresetVintage",
+		description: "editor.colorPresetVintageDescription",
+	},
+	frost: {
+		label: "editor.colorPresetFrost",
+		description: "editor.colorPresetFrostDescription",
+	},
+	golden: {
+		label: "editor.colorPresetGolden",
+		description: "editor.colorPresetGoldenDescription",
+	},
+	midnight: {
+		label: "editor.colorPresetMidnight",
+		description: "editor.colorPresetMidnightDescription",
+	},
+	vivid: {
+		label: "editor.colorPresetVivid",
+		description: "editor.colorPresetVividDescription",
+	},
+	dreamy: {
+		label: "editor.colorPresetDreamy",
+		description: "editor.colorPresetDreamyDescription",
+	},
+};
 
 function ColorPresetPreview(props: { preset: ColorPresetDefinition }) {
 	return (
@@ -83,6 +132,7 @@ export function ColorCorrectionSection(props: {
 	target: ColorCorrectionTarget;
 	scrollRef?: HTMLDivElement;
 }) {
+	const { t } = useI18n();
 	const { project, setProject } = useEditorContext();
 	const [adjustOpen, setAdjustOpen] = createSignal(false);
 
@@ -124,7 +174,7 @@ export function ColorCorrectionSection(props: {
 	return (
 		<>
 			<Field
-				name="Color Correction"
+				name={t("editor.colorCorrection")}
 				icon={<IconLucideSlidersHorizontal class="size-4" />}
 			>
 				<div class="grid grid-cols-3 gap-2">
@@ -132,7 +182,11 @@ export function ColorCorrectionSection(props: {
 						{(preset) => (
 							<button
 								type="button"
-								title={preset.description}
+								title={
+									COLOR_PRESET_MESSAGE_KEYS[preset.id]
+										? t(COLOR_PRESET_MESSAGE_KEYS[preset.id].description)
+										: preset.description
+								}
 								onClick={() => applyPreset(preset)}
 								class={cx(
 									"flex flex-col gap-1.5 rounded-lg border p-1.5 text-left transition-colors",
@@ -143,14 +197,16 @@ export function ColorCorrectionSection(props: {
 							>
 								<ColorPresetPreview preset={preset} />
 								<span class="px-0.5 text-xs font-medium text-gray-12">
-									{preset.label}
+									{COLOR_PRESET_MESSAGE_KEYS[preset.id]
+										? t(COLOR_PRESET_MESSAGE_KEYS[preset.id].label)
+										: preset.label}
 								</span>
 							</button>
 						)}
 					</For>
 				</div>
 			</Field>
-			<Field name="Grain" icon={<IconLucideGrip class="size-4" />}>
+			<Field name={t("editor.grain")} icon={<IconLucideGrip class="size-4" />}>
 				<Slider
 					value={[grade().grain * 100]}
 					onChange={(v) => setValue("grain", v[0] / 100, true)}
@@ -162,7 +218,7 @@ export function ColorCorrectionSection(props: {
 			</Field>
 			<Show when={props.target === "screen"}>
 				<Field
-					name="Apply to cursor"
+					name={t("editor.applyToCursor")}
 					icon={<IconLucideMousePointer2 class="size-4" />}
 					value={
 						<Toggle
@@ -177,14 +233,14 @@ export function ColorCorrectionSection(props: {
 			<div class="w-full">
 				<KCollapsible open={adjustOpen()} onOpenChange={handleAdjustToggle}>
 					<KCollapsible.Trigger class="flex gap-1 items-center w-full text-sm font-medium text-left group text-gray-12 hover:text-gray-10 transition duration-200 outline-hidden">
-						Fine-tune colors
+						{t("editor.fineTuneColors")}
 						<IconCapChevronDown class="transition-transform duration-200 size-5 group-data-expanded:rotate-180" />
 					</KCollapsible.Trigger>
 					<KCollapsible.Content class="overflow-hidden opacity-0 transition-opacity animate-collapsible-up data-expanded:animate-collapsible-down data-expanded:opacity-100">
 						<div class="mt-4 space-y-6 font-medium">
 							<For each={ADJUST_SLIDERS}>
 								{(slider) => (
-									<Field name={slider.label}>
+									<Field name={t(slider.labelKey)}>
 										<Slider
 											value={[Math.round(grade()[slider.key] * 100)]}
 											onChange={(v) =>

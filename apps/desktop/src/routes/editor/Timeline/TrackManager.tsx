@@ -1,7 +1,7 @@
 import { Popover } from "@kobalte/core/popover";
 import { cx } from "cva";
 import { createSignal, For, type JSX, Show } from "solid-js";
-import { useI18n } from "~/i18n";
+import { type MessageKey, useI18n } from "~/i18n";
 import type { TimelineTrackType } from "../context";
 import { CAP_TRACK_FILL_CLASS } from "./Track";
 
@@ -17,46 +17,38 @@ type TrackManagerOption = {
 };
 
 type TrackMeta = {
-	description: string;
-	unavailableHint: string;
+	descriptionKey: MessageKey;
+	unavailableHintKey?: MessageKey;
 };
 
 const TRACK_META: Record<TimelineTrackType, TrackMeta> = {
 	clip: {
-		description: "Your recorded screen footage.",
-		unavailableHint: "",
+		descriptionKey: "editor.trackClipDescription",
 	},
 	zoom: {
-		description: "Smooth zoom-ins that follow the action.",
-		unavailableHint: "",
+		descriptionKey: "editor.trackZoomDescription",
 	},
 	caption: {
-		description: "Auto-transcribe your recording into on-screen subtitles.",
-		unavailableHint: "",
+		descriptionKey: "editor.trackCaptionsDescription",
 	},
 	keyboard: {
-		description: "Display key presses on screen as you type.",
-		unavailableHint: "",
+		descriptionKey: "editor.trackKeyboardDescription",
 	},
 	text: {
-		description: "Add custom text overlays and titles to the canvas.",
-		unavailableHint: "",
+		descriptionKey: "editor.trackTextDescription",
 	},
 	mask: {
-		description: "Blur or black out private areas of the screen.",
-		unavailableHint: "",
+		descriptionKey: "editor.trackMaskDescription",
 	},
 	audio: {
-		description: "Add background music or import your own audio.",
-		unavailableHint: "",
+		descriptionKey: "editor.trackAudioDescription",
 	},
 	scene: {
-		description: "Switch layouts between your screen and camera.",
-		unavailableHint: "Record with a camera to use scenes.",
+		descriptionKey: "editor.trackSceneDescription",
+		unavailableHintKey: "editor.trackSceneUnavailable",
 	},
 	"3d": {
-		description: "Tilt the scene in 3D perspective.",
-		unavailableHint: "",
+		descriptionKey: "editor.track3DDescription",
 	},
 };
 
@@ -68,13 +60,17 @@ function TrackOptionRow(props: {
 	option: TrackManagerOption;
 	onSelect: () => void;
 }) {
+	const { t } = useI18n();
 	const meta = () => TRACK_META[props.option.type];
 	const accent = () => trackColor(props.option.type);
 	const available = () => props.option.available;
 	const isToggle = () => !props.option.supportsMultiple;
 	const isOn = () => props.option.active;
-	const description = () =>
-		available() ? meta().description : meta().unavailableHint;
+	const description = () => {
+		if (available()) return t(meta().descriptionKey);
+		const unavailableHintKey = meta().unavailableHintKey;
+		return unavailableHintKey ? t(unavailableHintKey) : "";
+	};
 
 	return (
 		<button
@@ -202,10 +198,10 @@ export function TrackManager(props: {
 				>
 					<div class="flex flex-col gap-0.5 px-4 pt-3.5 pb-3 border-b shrink-0 border-gray-3">
 						<span class="text-[0.8125rem] font-semibold text-gray-12">
-							Add a track
+							{t("editor.addTrack")}
 						</span>
 						<span class="text-[0.6875rem] leading-snug text-gray-10">
-							Layer captions, audio, zooms and more onto your timeline.
+							{t("editor.addTrackDescription")}
 						</span>
 					</div>
 					<div class="flex overflow-y-auto flex-col flex-1 gap-0.5 p-1.5 min-h-0 scrollbar-none">
@@ -228,7 +224,7 @@ export function TrackManager(props: {
 					<div class="p-1.5 border-t shrink-0 border-gray-3">
 						<Popover.CloseButton class="flex gap-1.5 justify-center items-center px-3 w-full h-9 text-[0.8125rem] font-medium rounded-lg border transition-colors duration-150 outline-hidden border-gray-4/70 bg-gray-2 text-gray-12 hover:bg-gray-3 hover:border-gray-5">
 							<IconLucideX class="size-3.5" />
-							Close
+							{t("common.close")}
 						</Popover.CloseButton>
 					</div>
 				</Popover.Content>

@@ -2694,6 +2694,17 @@ impl EditorWindow {
                     .map(|(mode, label)| ui::MenuItem::new(*label, *mode == current))
                     .collect()
             }
+            SidebarMenu::Camera3DEasing(_) => {
+                let current = timeline
+                    .camera3d_segments
+                    .get(index)
+                    .map_or(0, motion_easing);
+                MOTION_EASINGS
+                    .iter()
+                    .enumerate()
+                    .map(|(index, (_, label, _, _))| ui::MenuItem::new(*label, index == current))
+                    .collect()
+            }
             _ => Vec::new(),
         }
     }
@@ -2758,6 +2769,9 @@ impl EditorWindow {
                     seed_blur_mode(&mut s.blur, mode);
                     true
                 });
+            }
+            SidebarMenu::Camera3DEasing(_) => {
+                self.set_camera3d_easing(segment, index, window, cx);
             }
             _ => {}
         }
@@ -3880,6 +3894,8 @@ impl EditorWindow {
         let italic = segment.italic;
         let enabled = segment.enabled;
         let color = segment.color.clone();
+        let background_color = segment.background_color.clone();
+        let background_enabled = background_color.is_some();
         let family = segment.font_family.clone();
         let weight_label = TEXT_SEGMENT_WEIGHTS
             .iter()
@@ -4179,6 +4195,42 @@ impl EditorWindow {
                                 &color,
                                 cx,
                             ))
+                            .child(
+                                self.labelled_small(
+                                    "Background",
+                                    ui::Toggle::plain(
+                                        &theme,
+                                        SharedString::from(format!(
+                                            "text-background-enabled-{index}"
+                                        )),
+                                        background_enabled,
+                                    )
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        this.edit_text_segment(
+                                            "text-background",
+                                            index,
+                                            window,
+                                            cx,
+                                            move |segment| {
+                                                segment.background_color = if background_enabled {
+                                                    None
+                                                } else {
+                                                    Some("#000000".to_string())
+                                                };
+                                                true
+                                            },
+                                        );
+                                    }))
+                                    .into_any_element(),
+                                ),
+                            )
+                            .when_some(background_color, |this, background_color| {
+                                this.child(self.render_color_input(
+                                    ColorTarget::TextBackground(index),
+                                    &background_color,
+                                    cx,
+                                ))
+                            })
                             .child(
                                 self.labelled_small(
                                     "Opacity",
@@ -5560,6 +5612,7 @@ impl EditorWindow {
                                     .child(
                                         ui::EditorButton::plain(&theme, "camera3d-swap")
                                             .left_icon("icons/arrow-left-right.svg")
+                                            .tooltip(&theme, "Swap start and end")
                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                 this.swap_camera3d_poses(index, window, cx);
                                             })),
@@ -5575,6 +5628,7 @@ impl EditorWindow {
                                     .child(
                                         ui::EditorButton::plain(&theme, "camera3d-flip-h")
                                             .left_icon("icons/flip-horizontal-2.svg")
+                                            .tooltip(&theme, "Flip horizontal")
                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                 this.flip_camera3d(index, true, window, cx);
                                             })),
@@ -5582,6 +5636,7 @@ impl EditorWindow {
                                     .child(
                                         ui::EditorButton::plain(&theme, "camera3d-flip-v")
                                             .left_icon("icons/flip-vertical-2.svg")
+                                            .tooltip(&theme, "Flip vertical")
                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                 this.flip_camera3d(index, false, window, cx);
                                             })),
@@ -5920,17 +5975,12 @@ impl EditorWindow {
     }
 
     fn easing_select(&self, index: usize, current: usize, cx: &mut Context<Self>) -> AnyElement {
-        let theme = self.theme;
-        // Four options, and `ui::Menu` draws at the pointer without flipping;
-        // the corner-style select already established the two-option toggle,
-        // and this one cycles for the same reason.
-        ui::Select::plain(&theme, "camera3d-easing", MOTION_EASINGS[current].1)
-            .stretch_label()
-            .on_click(cx.listener(move |this, _, window, cx| {
-                let next = (current + 1) % MOTION_EASINGS.len();
-                this.set_camera3d_easing(index, next, window, cx);
-            }))
-            .into_any_element()
+        self.menu_select(
+            SidebarMenu::Camera3DEasing(index),
+            "camera3d-easing",
+            MOTION_EASINGS[current].1,
+            cx,
+        )
     }
 
     /// `selectPose` (`:4933-4937`): flip the card **and** park the playhead on
@@ -6091,6 +6141,9 @@ impl EditorWindow {
                         for index in indices(timeline.text_segments.len()) {
                             fields.push(FieldKey::TextContent(index));
                             colors.push(ColorTarget::TextColor(index));
+                            if timeline.text_segments[index].background_color.is_some() {
+                                colors.push(ColorTarget::TextBackground(index));
+                            }
                         }
                     }
                     TrackKind::Caption => {

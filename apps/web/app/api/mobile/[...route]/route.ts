@@ -63,6 +63,7 @@ import {
 import { createNotification } from "@/lib/Notification";
 import { isRateLimited, RATE_LIMIT_IDS } from "@/lib/rate-limit";
 import { apiToHandler } from "@/lib/server";
+import { enqueueVideoStorageNameSync } from "@/lib/sync-video-storage-names";
 import { startVideoProcessingWorkflow } from "@/lib/video-processing";
 import { importLoomVideoWorkflow } from "@/workflows/import-loom-video";
 
@@ -2766,14 +2767,16 @@ const ApiLive = HttpApiBuilder.api(Mobile.MobileApiContract).pipe(
 								serverEnv().APPLE_CLIENT_ID && serverEnv().APPLE_CLIENT_SECRET,
 							),
 							googleAuthAvailable: Boolean(serverEnv().GOOGLE_CLIENT_ID),
-							workosAuthAvailable: Boolean(serverEnv().WORKOS_CLIENT_ID),
+							workosAuthAvailable: Boolean(
+								serverEnv().WORKOS_CLIENT_ID && serverEnv().WORKOS_API_KEY,
+							),
 						}),
 					)
 					.handle("requestSession", ({ request, urlParams }) =>
 						withMappedErrors(
 							Effect.gen(function* () {
 								const user = yield* getCurrentUser;
-								if (Option.isNone(user)) {
+								if (Option.isNone(user) || urlParams.provider === "workos") {
 									const loginRedirectUrl =
 										Mobile.createMobileSessionLoginRedirectUrl({
 											deploymentOrigin: getDeploymentOrigin(),
@@ -2932,13 +2935,19 @@ const ApiLive = HttpApiBuilder.api(Mobile.MobileApiContract).pipe(
 								yield* database.use((db) =>
 									db
 										.update(Db.videos)
-										.set({ name: title })
+										.set({
+											name: title,
+											metadata: sql`JSON_SET(COALESCE(${Db.videos.metadata}, JSON_OBJECT()), '$.titleManuallyEdited', true)`,
+										})
 										.where(
 											and(
 												eq(Db.videos.id, path.id),
 												eq(Db.videos.ownerId, user.id),
 											),
 										),
+								);
+								yield* Effect.promise(() =>
+									enqueueVideoStorageNameSync(path.id),
 								);
 								yield* Effect.sync(() => {
 									revalidatePath("/dashboard/caps");

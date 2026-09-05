@@ -5,6 +5,8 @@ import {
 	VideosRepo,
 	verifyStorageObjectToken,
 } from "@cap/web-backend";
+import { getRecordingObjectIdentity } from "@cap/web-backend/src/Storage/recording-object-identity";
+import { isInternalRecordingKey } from "@cap/web-backend/src/Storage/recording-output";
 import { Storage as StorageDomain, Video } from "@cap/web-domain";
 import { Effect, Option } from "effect";
 import type { NextRequest } from "next/server";
@@ -70,6 +72,13 @@ const isObjectNotFoundError = (error: unknown) => {
 };
 
 const toProxyErrorResponse = (error: unknown) => {
+	const recordingReadStatus = getRecordingReadStatus(error);
+	if (recordingReadStatus) {
+		return new Response(
+			recordingReadStatus === 412 ? "Object changed" : "Object is unavailable",
+			{ status: recordingReadStatus },
+		);
+	}
 	if (isObjectNotFoundError(error) || isPolicyDeniedError(error)) {
 		return new Response("Not found", { status: 404 });
 	}
@@ -77,6 +86,19 @@ const toProxyErrorResponse = (error: unknown) => {
 		return new Response("Storage upstream error", { status: 502 });
 	}
 	return new Response("Internal server error", { status: 500 });
+};
+
+const getRecordingReadStatus = (error: unknown): 412 | 503 | undefined => {
+	const record = asRecord(error);
+	if (
+		record?._tag === "RecordingObjectReadError" &&
+		(record.status === 412 || record.status === 503)
+	) {
+		return record.status;
+	}
+	return record?.cause && record.cause !== error
+		? getRecordingReadStatus(record.cause)
+		: undefined;
 };
 
 const getTokenVideo = (videoId: Video.VideoId) =>
@@ -122,6 +144,20 @@ export async function GET(request: NextRequest) {
 		if (!key.startsWith(`${video.ownerId}/${video.id}/`)) {
 			return yield* Effect.fail("not-found" as const);
 		}
+		if (
+			isInternalRecordingKey(key) &&
+			!(tokenPayload?.videoId === videoIdParam && tokenPayload.key === key) &&
+			!(
+				video.source.type === "desktopMP4" &&
+				[
+					key === video.source.outputKey,
+					key === video.source.thumbnailKey,
+					key === video.source.previewKey,
+				].some(Boolean)
+			)
+		) {
+			return yield* Effect.fail("not-found" as const);
+		}
 
 		const [storage] = yield* Storage.getAccessForVideo(video);
 		if (!("getObjectResponse" in storage)) {
@@ -129,11 +165,47 @@ export async function GET(request: NextRequest) {
 			return Response.redirect(url);
 		}
 
-		const upstream = yield* storage.getObjectResponse(
-			key,
-			request.headers.get("range"),
-		);
+		const verificationRequested =
+			request.headers.get("x-cap-recording-verification") === "1";
+		const expectedIdentity = request.headers.get("if-match");
+		const head = verificationRequested
+			? yield* storage.headObject(key)
+			: undefined;
+		const identity = head
+			? getRecordingObjectIdentity(head, expectedIdentity ?? undefined)
+			: undefined;
+		if (verificationRequested && !identity) {
+			return new Response("Object identity is unavailable", { status: 503 });
+		}
+		if (
+			verificationRequested &&
+			expectedIdentity &&
+			expectedIdentity !== identity
+		) {
+			return new Response("Object changed", { status: 412 });
+		}
+		if (
+			verificationRequested &&
+			request.method === "HEAD" &&
+			head &&
+			identity
+		) {
+			const headers = new Headers(CACHE_CONTROL_HEADERS);
+			headers.set("ETag", identity);
+			headers.set("Accept-Ranges", "bytes");
+			if (head.ContentLength !== undefined)
+				headers.set("Content-Length", String(head.ContentLength));
+			if (head.ContentType) headers.set("Content-Type", head.ContentType);
+			return new Response(null, { status: 200, headers });
+		}
+		const upstream = identity
+			? yield* storage.getObjectResponse(key, request.headers.get("range"), {
+					objectIdentity: identity,
+					signal: request.signal,
+				})
+			: yield* storage.getObjectResponse(key, request.headers.get("range"));
 		const headers = new Headers(CACHE_CONTROL_HEADERS);
+		if (identity) headers.set("ETag", identity);
 		copyHeader(upstream.headers, headers, "content-type", "Content-Type");
 		copyHeader(upstream.headers, headers, "content-length", "Content-Length");
 		copyHeader(upstream.headers, headers, "content-range", "Content-Range");

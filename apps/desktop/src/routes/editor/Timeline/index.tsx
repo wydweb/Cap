@@ -32,6 +32,7 @@ import { commands } from "~/utils/tauri";
 import type { AudioTrackSegment } from "../audio";
 import {
 	applyCaptionResultToProject,
+	getCaptionGenerationErrorKey,
 	getCaptionGenerationErrorMessage,
 	getSelectedTranscriptionSettings,
 	transcribeEditorCaptions,
@@ -1095,7 +1096,10 @@ export function Timeline(props: {
 			toast.success(t("editor.captionsGenerated"));
 		} catch (error) {
 			console.error("Error generating captions:", error);
-			const errorMessage = getCaptionGenerationErrorMessage(error);
+			const errorKey = getCaptionGenerationErrorKey(error);
+			const errorMessage = errorKey
+				? t(errorKey)
+				: getCaptionGenerationErrorMessage(error);
 			toast.error(
 				t("editor.captionGenerationFailed", { message: errorMessage }),
 			);

@@ -340,6 +340,7 @@ export const enMessages = {
 	"target.window": "Window",
 	"editor.back": "Back",
 	"editor.captions": "Captions",
+	"editor.caption": "Caption",
 	"editor.clips": "Clips",
 	"editor.clip": "Clip",
 	"editor.deleteRecording": "Delete recording",
@@ -353,6 +354,8 @@ export const enMessages = {
 	"editor.keyboard": "Keyboard",
 	"editor.text": "Text",
 	"editor.mask": "Mask",
+	"editor.clickToAddMask": "Click to add a mask",
+	"editor.maskTrackDescription": "Combine sensitive blur or highlight masks",
 	"editor.audio": "Audio",
 	"editor.zoom": "Zoom",
 	"editor.scene": "Scene",
@@ -364,6 +367,7 @@ export const enMessages = {
 	"editor.createPreset": "Create Preset",
 	"editor.renamePreset": "Rename Preset",
 	"editor.deletePreset": "Delete Preset",
+	"editor.deletePresetConfirm": "Are you sure you want to delete this preset?",
 	"editor.name": "Name",
 	"editor.presetNamePlaceholder": "Enter preset name…",
 	"editor.setAsDefault": "Set as default",
@@ -754,6 +758,9 @@ export const enMessages = {
 	"editor.displayText": "Display Text",
 	"editor.fadeDurationOverride": "Fade Duration Override",
 	"editor.noKeyboardSegments": "No keyboard segments yet.",
+	"editor.noKeyboardEvents": "No keyboard events",
+	"editor.noKeyboardEventsDescription":
+		"Record keyboard presses or generate from recording",
 	"editor.noKeyboardSegmentsDescription":
 		"Click “Generate Keyboard Segments” to create segments from recorded keyboard presses.",
 	"editor.positionTopLeft": "Top Left",
@@ -828,6 +835,12 @@ export const enMessages = {
 	"editor.syncDescription":
 		"Fine-tune source offsets if audio or camera drifts out of sync with the screen recording.",
 	"editor.clipNumber": "Clip {number}",
+	"editor.splitNumber": "Split {number}",
+	"editor.importingClip": "Importing clip…",
+	"editor.clipImported": "Clip imported",
+	"editor.clipsImported": "{count} clips imported",
+	"editor.failedToImportClip": "Failed to import clip: {message}",
+	"editor.existingRecording": "Existing recording",
 	"editor.autoSyncDescription":
 		"Cap calculated these offsets automatically to keep audio in sync with the video. Adjust them if anything still sounds off.",
 	"editor.enabled": "Enabled",
@@ -851,6 +864,16 @@ export const enMessages = {
 	"editor.pixelSize": "Pixel Size",
 	"editor.outsideDarkness": "Outside Darkness",
 	"editor.new3DScene": "New 3D scene",
+	"editor.new3DSceneDescription":
+		"Lay a chain of camera moves over the whole video",
+	"editor.sceneShowcase": "Showcase",
+	"editor.sceneProductTour": "Product tour",
+	"editor.scenePunchIn": "Punch in",
+	"editor.shotCount": "{count} shots",
+	"editor.shotsDescription":
+		"Shots split the video into separate camera moves.",
+	"editor.addScene": "Add scene",
+	"editor.add3DScene": "Add 3D scene",
 	"editor.howManyShots": "How many shots?",
 	"editor.videoTooShort": "Video too short",
 	"editor.swapStartEnd": "Swap start and end",
@@ -974,6 +997,14 @@ export const enMessages = {
 	"editor.noCaptionsGenerated":
 		"No captions were generated. The audio might be too quiet or unclear.",
 	"editor.captionGenerationFailed": "Failed to generate captions: {message}",
+	"editor.captionNoAudioFound": "No audio was found in the recording",
+	"editor.captionModelMissing":
+		"Caption model not found. Please download it first",
+	"editor.captionModelLoadFailed":
+		"Failed to load the caption model. Try downloading it again",
+	"editor.captionParakeetUnavailable":
+		"Parakeet models are not available on Intel Macs. Use a Whisper model instead",
+	"editor.captionUnknownError": "An unknown error occurred",
 	"editor.tiltX": "Tilt X",
 	"editor.tiltY": "Tilt Y",
 	"editor.roll": "Roll",

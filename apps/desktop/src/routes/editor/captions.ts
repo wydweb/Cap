@@ -661,6 +661,27 @@ export function getCaptionGenerationErrorMessage(error: unknown) {
 	return message;
 }
 
+export function getCaptionGenerationErrorKey(error: unknown) {
+	const message = getCaptionGenerationErrorMessage(error);
+	if (
+		message === "No audio found in the video file" ||
+		message.includes("No audio sources found")
+	)
+		return "editor.captionNoAudioFound" as const;
+	if (message === "Caption model not found. Please download it first")
+		return "editor.captionModelMissing" as const;
+	if (message === "Failed to load the caption model. Try downloading it again")
+		return "editor.captionModelLoadFailed" as const;
+	if (
+		message ===
+		"Parakeet models are not available on Intel Macs. Use a Whisper model instead"
+	)
+		return "editor.captionParakeetUnavailable" as const;
+	if (message === "Unknown error occurred")
+		return "editor.captionUnknownError" as const;
+	return null;
+}
+
 if (import.meta.vitest) {
 	const { describe, expect, it } = import.meta.vitest;
 

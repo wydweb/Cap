@@ -942,7 +942,7 @@ function Dialogs() {
 												disabled={createPreset.isPending}
 												onClick={() => createPreset.mutate()}
 											>
-												Create
+												{t("editor.createPreset")}
 											</Dialog.ConfirmButton>
 										}
 									>
@@ -990,7 +990,7 @@ function Dialogs() {
 												disabled={renamePreset.isPending}
 												onClick={() => renamePreset.mutate()}
 											>
-												Rename
+												{t("editor.rename")}
 											</Dialog.ConfirmButton>
 										}
 									>
@@ -1030,12 +1030,12 @@ function Dialogs() {
 												onClick={() => deletePreset.mutate()}
 												disabled={deletePreset.isPending}
 											>
-												Delete
+												{t("common.delete")}
 											</Dialog.ConfirmButton>
 										}
 									>
 										<p class="text-gray-11">
-											Are you sure you want to delete this preset?
+											{t("editor.deletePresetConfirm")}
 										</p>
 									</DialogContent>
 								);

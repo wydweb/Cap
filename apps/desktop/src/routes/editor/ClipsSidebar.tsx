@@ -505,7 +505,7 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 	const importRecordingPath = async (sourcePath: string) => {
 		if (importing()) return;
 		setImporting(true);
-		const toastId = toast.loading("Importing clip…");
+		const toastId = toast.loading(t("editor.importingClip"));
 		try {
 			if (editorState.playing) {
 				await commands.stopPlayback();
@@ -513,13 +513,16 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 			}
 			await commands.setProjectConfig(serializeProjectConfiguration(project));
 			const count = await commands.addExistingRecordingToEditor(sourcePath);
-			toast.success(count === 1 ? "Clip imported" : `${count} clips imported`, {
-				id: toastId,
-			});
+			toast.success(
+				count === 1
+					? t("editor.clipImported")
+					: t("editor.clipsImported", { count }),
+				{ id: toastId },
+			);
 			window.location.reload();
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			toast.error(`Failed to import clip: ${message}`, { id: toastId });
+			toast.error(t("editor.failedToImportClip", { message }), { id: toastId });
 			setImporting(false);
 		}
 	};
@@ -545,7 +548,7 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 		const menu = await Menu.new({
 			items: [
 				await MenuItem.new({
-					text: "Existing recording",
+					text: t("editor.existingRecording"),
 					action: () => void pickCapRecording(),
 				}),
 				await MenuItem.new({
@@ -562,7 +565,8 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 	);
 	const recordedClipCount = () => editorInstance.recordings.segments.length;
 
-	const clipLabel = (index: number) => `Clip ${index + 1}`;
+	const clipLabel = (index: number) =>
+		t("editor.clipNumber", { number: index + 1 });
 
 	const segmentClipIndex = (segment: EditorTimelineSegment, index: number) =>
 		segment.recordingSegment ??
@@ -585,7 +589,7 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 		const splitNumber = segmentSplitNumber(segment, index);
 		return splitNumber === 1
 			? clipLabel(segmentClipIndex(segment, index))
-			: `Split ${splitNumber - 1}`;
+			: t("editor.splitNumber", { number: splitNumber - 1 });
 	};
 
 	const displayName = (segment: EditorTimelineSegment, index: number) => {
@@ -803,7 +807,7 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 				class="flex flex-none gap-2 items-center px-4 w-full h-16 text-sm font-medium border-b transition-colors text-gray-12 border-gray-3 hover:bg-gray-3"
 			>
 				<IconCapMoveLeft class="size-4 text-gray-11" />
-				Back to editor
+				{t("editor.backToEditor")}
 			</button>
 
 			<div class="flex flex-col flex-1 gap-3 p-3 min-h-0">
@@ -1173,8 +1177,8 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 													}}
 													placeholder={
 														activeTargetMenu() === "window"
-															? "Search windows"
-															: "Search displays"
+															? t("target.searchWindows")
+															: t("target.searchDisplays")
 													}
 													autoCapitalize="off"
 													autocorrect="off"
@@ -1191,7 +1195,7 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 													isLoading={displayTargets.isPending}
 													errorMessage={
 														displayTargets.error
-															? "Unable to load displays."
+															? t("target.unableToLoadDisplays")
 															: undefined
 													}
 													onSelect={(target) =>
@@ -1200,7 +1204,7 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 													highlightQuery={targetSearch().trim()}
 													emptyMessage={
 														targetSearch().trim()
-															? "No matching displays"
+															? t("target.noMatchingDisplays")
 															: undefined
 													}
 												/>
@@ -1212,14 +1216,14 @@ function ClipsSidebarInner(props: { open: boolean; class?: string }) {
 													isLoading={windowTargets.isPending}
 													errorMessage={
 														windowTargets.error
-															? "Unable to load windows."
+															? t("target.unableToLoadWindows")
 															: undefined
 													}
 													onSelect={(target) => void selectWindowTarget(target)}
 													highlightQuery={targetSearch().trim()}
 													emptyMessage={
 														targetSearch().trim()
-															? "No matching windows"
+															? t("target.noMatchingWindows")
 															: undefined
 													}
 												/>

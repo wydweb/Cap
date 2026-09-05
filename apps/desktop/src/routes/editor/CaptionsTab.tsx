@@ -38,6 +38,7 @@ import {
 	CAPTION_MODEL_FOLDER,
 	DEFAULT_CAPTION_MODEL,
 	DEFAULT_WHISPER_CAPTION_MODEL,
+	getCaptionGenerationErrorKey,
 	getCaptionGenerationErrorMessage,
 	getModelPath,
 	mapEditedTimeToSource,
@@ -805,7 +806,10 @@ export function CaptionsTab(props: {
 			}
 		} catch (error) {
 			console.error("Error generating captions:", error);
-			const errorMessage = getCaptionGenerationErrorMessage(error);
+			const errorKey = getCaptionGenerationErrorKey(error);
+			const errorMessage = errorKey
+				? t(errorKey)
+				: getCaptionGenerationErrorMessage(error);
 			toast.error(
 				t("editor.captionGenerationFailed", { message: errorMessage }),
 			);

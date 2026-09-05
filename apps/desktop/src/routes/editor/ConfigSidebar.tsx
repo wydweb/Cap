@@ -4990,8 +4990,14 @@ function Camera3DSceneCard(props: {
 	selected?: boolean;
 	onClick: () => void;
 }) {
+	const { t } = useI18n();
 	const [hovered, setHovered] = createSignal(false);
 	const shotCount = () => props.shotCount ?? props.scene.shots.length;
+	const sceneName = () => {
+		if (props.scene.id === "showcase") return t("editor.sceneShowcase");
+		if (props.scene.id === "product-tour") return t("editor.sceneProductTour");
+		return t("editor.scenePunchIn");
+	};
 
 	return (
 		<button
@@ -5013,11 +5019,11 @@ function Camera3DSceneCard(props: {
 					height={CAMERA3D_SCENE_PREVIEW_HEIGHT}
 				/>
 				<span class="absolute top-1 right-1 rounded px-1 text-[9px] leading-[14px] bg-gray-1/80 dark:bg-gray-2/80 text-gray-11">
-					{shotCount()} {shotCount() === 1 ? "shot" : "shots"}
+					{t("editor.shotCount", { count: shotCount() })}
 				</span>
 			</div>
 			<span class="text-[10px] leading-tight text-center text-gray-11">
-				{props.scene.name}
+				{sceneName()}
 			</span>
 		</button>
 	);
@@ -5063,14 +5069,12 @@ function Camera3DSetupPanel(props: {
 					onClick={() => props.onClose()}
 					leftIcon={<IconLucideX />}
 				>
-					Close
+					{t("common.close")}
 				</EditorButton>
 				<span class="text-sm text-gray-10">{t("editor.new3DScene")}</span>
 			</div>
 
-			<p class="text-xs text-gray-10">
-				Lay a chain of camera moves over the whole video
-			</p>
+			<p class="text-xs text-gray-10">{t("editor.new3DSceneDescription")}</p>
 
 			<Field
 				name={t("editor.style")}
@@ -5122,9 +5126,7 @@ function Camera3DSetupPanel(props: {
 							}}
 						</For>
 					</div>
-					<p class="text-xs text-gray-10">
-						Shots split the video into separate camera moves.
-					</p>
+					<p class="text-xs text-gray-10">{t("editor.shotsDescription")}</p>
 				</div>
 			</Field>
 
@@ -5135,10 +5137,10 @@ function Camera3DSetupPanel(props: {
 					disabled={totalDuration() <= 0}
 					onClick={() => projectActions.addCamera3DScene(scene().id, shots())}
 				>
-					Add scene
+					{t("editor.addScene")}
 				</Button>
 				<Button variant="gray" size="md" onClick={() => props.onClose()}>
-					Cancel
+					{t("common.cancel")}
 				</Button>
 			</div>
 		</div>

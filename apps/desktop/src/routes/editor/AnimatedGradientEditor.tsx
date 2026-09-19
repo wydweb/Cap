@@ -6,12 +6,10 @@ import {
 	createSignal,
 	For,
 	Index,
-	type JSX,
 	onCleanup,
 	Show,
 } from "solid-js";
 import { produce } from "solid-js/store";
-import { useI18n } from "~/i18n";
 import { animatedGradientsStore } from "~/store";
 import type { OrganizationBrandColorSwatch } from "~/utils/organization-branding";
 import {
@@ -34,7 +32,7 @@ import {
 import { BrandColorsDropdown } from "./BrandColorsDropdown";
 import { hexToRgb, RgbInput } from "./color-utils";
 import { useEditorContext } from "./context";
-import { Field, Input, Slider, Subfield } from "./ui";
+import { EditorButton, Field, Input, Section, Slider } from "./ui";
 
 const MAX_STOPS = 5;
 const MIN_STOPS = 2;
@@ -64,13 +62,9 @@ function palettePreview(config: AnimatedGradientConfig) {
 	return `linear-gradient(90deg, ${stops.join(",")})`;
 }
 
-function controlValue(
-	control: AnimatedGradientControl,
-	value: number,
-	stillLabel = "Still",
-) {
+function controlValue(control: AnimatedGradientControl, value: number) {
 	if (control.key === "direction") return `${Math.round(value)}°`;
-	if (control.key === MOTION_KEY && value === 0) return stillLabel;
+	if (control.key === MOTION_KEY && value === 0) return "Still";
 	return control.step < 1 ? value.toFixed(1) : String(Math.round(value));
 }
 
@@ -123,66 +117,33 @@ function largestGapPosition(stops: Stop[]) {
 	return position;
 }
 
-function HeaderButton(props: {
-	icon: JSX.Element;
-	label: string;
-	title?: string;
-	disabled?: boolean;
-	pressed?: boolean;
-	onClick: () => void;
-}) {
-	return (
-		<button
-			type="button"
-			title={props.title}
-			aria-pressed={props.pressed}
-			disabled={props.disabled}
-			class={cx(
-				"flex h-7 items-center gap-1 rounded-md px-2 text-xs transition-colors hover:bg-gray-3 hover:text-gray-12 disabled:opacity-40 disabled:hover:bg-transparent",
-				props.pressed ? "bg-gray-3 text-gray-12" : "text-gray-11",
-			)}
-			onClick={props.onClick}
-		>
-			<span class="[&>svg]:size-3.5">{props.icon}</span>
-			{props.label}
-		</button>
-	);
-}
-
 function ControlRow(props: {
 	control: AnimatedGradientControl;
 	value: number;
 	onChange: (value: number) => void;
 }) {
-	const { t } = useI18n();
 	return (
-		<div class="flex items-center gap-3">
-			<span class="w-24 shrink-0 truncate text-xs text-gray-11">
-				{props.control.label}
-			</span>
+		<Field
+			inline
+			name={props.control.label}
+			value={controlValue(props.control, props.value)}
+		>
 			<Slider
-				class="min-w-0 flex-1"
 				value={[props.value]}
 				minValue={props.control.min}
 				maxValue={props.control.max}
 				step={props.control.step}
-				formatTooltip={(value) =>
-					controlValue(props.control, value, t("editor.still"))
-				}
+				formatTooltip={(value) => controlValue(props.control, value)}
 				aria-label={props.control.label}
 				onChange={([next]) => props.onChange(next)}
 			/>
-			<span class="w-10 shrink-0 text-right text-xs text-gray-11 tabular-nums">
-				{controlValue(props.control, props.value, t("editor.still"))}
-			</span>
-		</div>
+		</Field>
 	);
 }
 
 export function AnimatedGradientEditor(props: {
 	brandColorSwatches?: OrganizationBrandColorSwatch[];
 }) {
-	const { t } = useI18n();
 	const { project, setProject, projectHistory } = useEditorContext();
 	const catalog = createQuery(() => ({
 		queryKey: ["animated-gradient-catalog"],
@@ -270,7 +231,7 @@ export function AnimatedGradientEditor(props: {
 			)
 				applyConfig(next);
 		} catch {
-			if (!disposed) setError(t("editor.randomGradientFailed"));
+			if (!disposed) setError("Could not create a random gradient. Try again.");
 		} finally {
 			if (!disposed) setRandomizing(false);
 		}
@@ -376,8 +337,8 @@ export function AnimatedGradientEditor(props: {
 			if (!disposed)
 				setError(
 					error instanceof SavedGradientLimitError
-						? t("editor.gradientLimit", { count: MAX_SAVED })
-						: t("editor.gradientSaveFailed"),
+						? `You can save up to ${MAX_SAVED} gradients. Delete one to add another.`
+						: "Could not save this gradient. Try again.",
 				);
 		} finally {
 			if (!disposed) setSaving(false);
@@ -396,33 +357,36 @@ export function AnimatedGradientEditor(props: {
 			if (disposed) return;
 			await library.refetch();
 		} catch {
-			if (!disposed) setError(t("editor.gradientDeleteFailed"));
+			if (!disposed) setError("Could not delete this gradient. Try again.");
 		} finally {
 			if (!disposed) setDeletingId(null);
 		}
 	};
 
 	const swatchClass =
-		"aspect-square w-full rounded-lg ring-offset-2 ring-offset-gray-200 transition-all duration-200 hover:scale-105 hover:opacity-80";
+		"aspect-square w-full rounded-lg border border-ed-line ring-offset-2 ring-offset-ed-card transition-all duration-200 hover:scale-105 hover:opacity-80";
 
 	return (
 		<Show when={config()}>
 			{(current) => (
-				<div class="flex flex-col gap-5">
+				<div class="flex flex-col gap-3.5">
 					<Show when={error()}>
 						<p role="alert" class="text-xs text-red-11">
 							{error()}
 						</p>
 					</Show>
 
-					<Field
-						name={t("editor.presets")}
-						value={
-							<HeaderButton
-								icon={<IconLucideSave />}
-								label={t("editor.save")}
-								title={t("editor.save")}
-								pressed={saveOpen()}
+					<Section
+						name="Presets"
+						action={
+							<EditorButton
+								size="sm"
+								leftIcon={<IconLucideSave />}
+								title="Save the current gradient"
+								aria-pressed={saveOpen()}
+								class={
+									saveOpen() ? "bg-ed-ctl-hover text-ed-text-1" : undefined
+								}
 								disabled={
 									saving() ||
 									library.isPending ||
@@ -430,19 +394,21 @@ export function AnimatedGradientEditor(props: {
 									savedPresets().length >= MAX_SAVED
 								}
 								onClick={() => (saveOpen() ? closeSave() : setSaveOpen(true))}
-							/>
+							>
+								Save
+							</EditorButton>
 						}
 					>
 						<div class="flex flex-col gap-3">
 							<div class="grid grid-cols-7 gap-2">
 								<button
 									type="button"
-									title={t("editor.randomize")}
-									aria-label={t("editor.randomizeGradient")}
+									title="Randomize"
+									aria-label="Randomize gradient"
 									disabled={randomizing()}
 									class={cx(
 										swatchClass,
-										"flex items-center justify-center border border-dashed border-gray-8 bg-gray-2 text-gray-10 disabled:opacity-50",
+										"flex items-center justify-center border border-dashed border-ed-line-strong bg-ed-ctl text-ed-text-3 disabled:opacity-50",
 									)}
 									onClick={() => void randomize()}
 								>
@@ -456,7 +422,9 @@ export function AnimatedGradientEditor(props: {
 											aria-label={preset.name}
 											aria-pressed={isSelected(preset)}
 											class={swatchClass}
-											classList={{ "ring-2 ring-gray-500": isSelected(preset) }}
+											classList={{
+												"ring-2 ring-ed-accent": isSelected(preset),
+											}}
 											style={{ background: palettePreview(preset.config) }}
 											onClick={() => applyConfig(preset.config)}
 										/>
@@ -468,8 +436,8 @@ export function AnimatedGradientEditor(props: {
 									<Input
 										ref={(element) => queueMicrotask(() => element.focus())}
 										class="min-w-0 flex-1"
-										placeholder={t("editor.nameGradient")}
-										aria-label={t("editor.savedGradientName")}
+										placeholder="Name this gradient"
+										aria-label="Saved gradient name"
 										maxLength={80}
 										value={presetName()}
 										disabled={saving()}
@@ -488,16 +456,16 @@ export function AnimatedGradientEditor(props: {
 									/>
 									<button
 										type="button"
-										class="h-8 rounded-lg bg-gray-3 px-3 text-xs font-medium text-gray-12 transition-colors hover:bg-gray-4 disabled:opacity-40"
+										class="h-8 rounded-[7px] bg-ed-ctl px-3 text-[12px] font-medium text-ed-text-1 outline-hidden transition-colors duration-150 hover:bg-ed-ctl-hover disabled:opacity-40"
 										disabled={!presetName().trim() || saving()}
 										onClick={() => void savePreset()}
 									>
-										{saving() ? t("editor.saving") : t("editor.save")}
+										{saving() ? "Saving…" : "Save"}
 									</button>
 									<button
 										type="button"
-										aria-label={t("common.cancel")}
-										class="rounded-md p-1.5 text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12"
+										aria-label="Cancel"
+										class="rounded-md p-1.5 text-ed-text-3 outline-hidden transition-colors duration-150 hover:bg-ed-ctl-hover hover:text-ed-text-1"
 										onClick={closeSave}
 									>
 										<IconLucideX class="size-3.5" />
@@ -505,9 +473,7 @@ export function AnimatedGradientEditor(props: {
 								</div>
 							</Show>
 							<Show when={savedPresets().length > 0}>
-								<span class="text-[11px] text-gray-10">
-									{t("editor.saved")}
-								</span>
+								<span class="text-[11px] text-ed-text-3">Saved</span>
 								<div class="grid grid-cols-7 gap-2">
 									<For each={savedPresets()}>
 										{(preset) => (
@@ -519,7 +485,7 @@ export function AnimatedGradientEditor(props: {
 													aria-pressed={isSelected(preset)}
 													class={swatchClass}
 													classList={{
-														"ring-2 ring-gray-500": isSelected(preset),
+														"ring-2 ring-ed-accent": isSelected(preset),
 													}}
 													style={{ background: palettePreview(preset.config) }}
 													onClick={() => applyConfig(preset.config)}
@@ -527,12 +493,10 @@ export function AnimatedGradientEditor(props: {
 												<Show when={isSelected(preset)}>
 													<button
 														type="button"
-														title={t("common.delete")}
-														aria-label={t("editor.deleteNamed", {
-															name: preset.name,
-														})}
+														title="Delete"
+														aria-label={`Delete ${preset.name}`}
 														disabled={deletingId() !== null}
-														class="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-gray-12 text-gray-1 shadow-sm transition-colors hover:bg-red-11 disabled:opacity-40"
+														class="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-ed-text-1 text-ed-card shadow-ed-card outline-hidden transition-colors duration-150 hover:bg-red-11 hover:text-white disabled:opacity-40"
 														onClick={() => void deletePreset(preset.id)}
 													>
 														<IconLucideX class="size-3" />
@@ -544,22 +508,24 @@ export function AnimatedGradientEditor(props: {
 								</div>
 							</Show>
 						</div>
-					</Field>
+					</Section>
 
-					<div class="w-full border-t border-dashed border-gray-5" />
+					<div class="w-full border-t border-ed-line" />
 
-					<Field
-						name={t("editor.colors")}
-						value={
-							<HeaderButton
-								icon={<IconLucidePlus />}
-								label={t("editor.add")}
-								title={t("editor.addColor")}
+					<Section
+						name="Colours"
+						action={
+							<EditorButton
+								size="sm"
+								leftIcon={<IconLucidePlus />}
+								title="Add a colour"
 								disabled={current().colorStops.length >= MAX_STOPS}
 								onClick={() =>
 									addStop(largestGapPosition(current().colorStops))
 								}
-							/>
+							>
+								Add
+							</EditorButton>
 						}
 					>
 						<div class="flex flex-col gap-3">
@@ -585,7 +551,7 @@ export function AnimatedGradientEditor(props: {
 									}}
 								>
 									<div
-										class="absolute inset-0 rounded-lg border border-gray-5"
+										class="absolute inset-0 rounded-lg border border-ed-line"
 										style={{ background: palettePreview(current()) }}
 									/>
 									<Index each={current().colorStops}>
@@ -594,13 +560,13 @@ export function AnimatedGradientEditor(props: {
 											return (
 												<button
 													type="button"
-													aria-label={t("editor.colorNumber", {
-														number: index + 1,
-													})}
+													aria-label={`Colour ${index + 1}`}
 													aria-pressed={selected()}
 													class={cx(
-														"absolute top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full p-0.5 shadow-md outline-hidden transition-[width,height] focus-visible:ring-2 focus-visible:ring-blue-9",
-														selected() ? "size-6 bg-blue-9" : "size-5 bg-white",
+														"absolute top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full p-0.5 shadow-md outline-hidden transition-[width,height] focus-visible:ring-2 focus-visible:ring-ed-accent",
+														selected()
+															? "size-6 bg-ed-accent"
+															: "size-5 bg-white",
 													)}
 													style={{ left: `${stop().position}%` }}
 													onPointerDown={(event) => {
@@ -666,17 +632,15 @@ export function AnimatedGradientEditor(props: {
 													})
 												}
 											/>
-											<span class="ml-auto text-xs text-gray-11 tabular-nums">
+											<span class="ml-auto text-[11px] text-ed-text-3 tabular-nums">
 												{Math.round(stop().position)}%
 											</span>
 											<button
 												type="button"
-												title={t("editor.removeColor")}
-												aria-label={t("editor.removeColorNumber", {
-													number: stopIndex() + 1,
-												})}
+												title="Remove colour"
+												aria-label={`Remove colour ${stopIndex() + 1}`}
 												disabled={current().colorStops.length <= MIN_STOPS}
-												class="rounded-md p-1.5 text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12 disabled:opacity-30 disabled:hover:bg-transparent"
+												class="rounded-md p-1.5 text-ed-text-3 outline-hidden transition-colors duration-150 hover:bg-ed-ctl-hover hover:text-ed-text-1 disabled:opacity-30 disabled:hover:bg-transparent"
 												onClick={() => removeStop(stopIndex())}
 											>
 												<IconLucideTrash2 class="size-3.5" />
@@ -698,64 +662,58 @@ export function AnimatedGradientEditor(props: {
 								)}
 							</Show>
 						</div>
-					</Field>
+					</Section>
 
-					<div class="w-full border-t border-dashed border-gray-5" />
+					<div class="w-full border-t border-ed-line" />
 
 					<Show when={motionControl()}>
 						{(control) => (
-							<Subfield name={t("editor.motion")} class="gap-4">
-								<div class="flex min-w-0 flex-1 items-center gap-3">
-									<Slider
-										class="min-w-0 flex-1"
-										value={[current()[MOTION_KEY]]}
-										minValue={control().min}
-										maxValue={control().max}
-										step={control().step}
-										formatTooltip={(value) =>
-											controlValue(control(), value, t("editor.still"))
-										}
-										aria-label={t("editor.motionSpeed")}
-										onChange={([next]) =>
-											updateConfig((value) => {
-												value[MOTION_KEY] = next;
-											})
-										}
-									/>
-									<span class="w-10 shrink-0 text-right text-xs text-gray-11 tabular-nums">
-										{controlValue(
-											control(),
-											current()[MOTION_KEY],
-											t("editor.still"),
-										)}
-									</span>
-								</div>
-							</Subfield>
+							<Field
+								inline
+								name="Motion"
+								value={controlValue(control(), current()[MOTION_KEY])}
+							>
+								<Slider
+									value={[current()[MOTION_KEY]]}
+									minValue={control().min}
+									maxValue={control().max}
+									step={control().step}
+									formatTooltip={(value) => controlValue(control(), value)}
+									aria-label="Motion speed"
+									onChange={([next]) =>
+										updateConfig((value) => {
+											value[MOTION_KEY] = next;
+										})
+									}
+								/>
+							</Field>
 						)}
 					</Show>
 
-					<div class="w-full border-t border-dashed border-gray-5" />
+					<div class="w-full border-t border-ed-line" />
 
 					<KCollapsible open={fineTuneOpen()} onOpenChange={setFineTuneOpen}>
-						<div class="flex items-center">
-							<KCollapsible.Trigger class="group flex flex-1 items-center gap-1.5 text-sm font-medium text-gray-12 outline-hidden">
-								{t("editor.fineTune")}
-								<IconCapChevronDown class="size-3.5 text-gray-10 transition-transform duration-200 group-data-expanded:rotate-180" />
+						<div class="flex items-center min-h-[22px]">
+							<KCollapsible.Trigger class="group flex flex-1 items-center gap-1.5 text-[12px] font-medium text-ed-text-2 transition-colors duration-150 hover:text-ed-text-1 outline-hidden">
+								Fine-tune
+								<IconCapChevronDown class="size-3.5 text-ed-text-3 transition-transform duration-200 group-data-expanded:rotate-180" />
 							</KCollapsible.Trigger>
 							<Show when={fineTuneOpen()}>
-								<HeaderButton
-									icon={<IconLucideRotateCcw />}
-									label={t("editor.reset")}
-									title={t("editor.resetFineTune")}
+								<EditorButton
+									size="sm"
+									leftIcon={<IconLucideRotateCcw />}
+									title="Reset fine-tune settings"
 									onClick={resetFineTune}
-								/>
+								>
+									Reset
+								</EditorButton>
 							</Show>
 						</div>
 						<KCollapsible.Content class="overflow-hidden opacity-0 transition-opacity animate-collapsible-up data-expanded:animate-collapsible-down data-expanded:opacity-100">
 							<div class="flex flex-col gap-3 pt-4">
 								<div
 									role="tablist"
-									class="grid grid-cols-4 gap-1 rounded-lg border border-gray-3 bg-gray-2 p-1"
+									class="flex flex-row rounded-lg bg-ed-ctl p-0.5"
 								>
 									<For each={groups()}>
 										{(group) => (
@@ -764,10 +722,10 @@ export function AnimatedGradientEditor(props: {
 												role="tab"
 												aria-selected={activeGroup()?.name === group.name}
 												class={cx(
-													"rounded-md py-1 text-xs font-medium transition-colors",
+													"flex flex-1 justify-center items-center h-[26px] px-1 rounded-md text-[11.5px] font-medium whitespace-nowrap border-0 outline-hidden transition-colors duration-200",
 													activeGroup()?.name === group.name
-														? "bg-gray-5 text-gray-12"
-														: "text-gray-10 hover:text-gray-12",
+														? "bg-ed-card text-ed-text-1 shadow-[0_1px_2px_rgba(0,0,0,.12),0_0_0_.5px_rgba(0,0,0,.06)] dark:bg-white/11 dark:shadow-none"
+														: "text-ed-text-2 hover:text-ed-text-1",
 												)}
 												onClick={() => setGroupName(group.name)}
 											>
@@ -776,7 +734,7 @@ export function AnimatedGradientEditor(props: {
 										)}
 									</For>
 								</div>
-								<div class="flex flex-col gap-1">
+								<div class="flex flex-col">
 									<For each={activeGroup()?.controls ?? []}>
 										{(control) => (
 											<ControlRow

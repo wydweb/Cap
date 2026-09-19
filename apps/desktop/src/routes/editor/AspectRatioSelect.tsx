@@ -59,7 +59,7 @@ function AspectRatioSelect() {
 									: label(props.item.rawValue)}
 								<Show when={item()}>
 									{(item) => (
-										<span class="text-gray-11">
+										<span class="text-ed-text-3">
 											{"⋅"}
 											{item().ratio[0]}:{item().ratio[1]}
 										</span>
@@ -72,18 +72,17 @@ function AspectRatioSelect() {
 						</MenuItem>
 					);
 				}}
-				placement="top-start"
+				placement="bottom-start"
 			>
 				<EditorButton<typeof KSelect.Trigger>
 					as={KSelect.Trigger}
-					class="w-28"
+					variant="text"
 					leftIcon={<IconCapLayout />}
 					rightIcon={
 						<KSelect.Icon>
 							<IconCapChevronDown />
 						</KSelect.Icon>
 					}
-					rightIconEnd={true}
 				>
 					<KSelect.Value<AspectRatio | "auto">>
 						{(state) => {
@@ -91,7 +90,7 @@ function AspectRatioSelect() {
 								const option = state.selectedOption();
 								return option === "auto" ? t("editor.auto") : label(option);
 							};
-							return <>{text()}</>;
+							return <span class="max-[1200px]:hidden">{text()}</span>;
 						}}
 					</KSelect.Value>
 				</EditorButton>

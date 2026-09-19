@@ -13,7 +13,6 @@ import {
 } from "solid-js";
 import toast from "solid-toast";
 import { SignInButton } from "~/components/SignInButton";
-import { type MessageKey, useI18n } from "~/i18n";
 import {
 	createSelectedOrganization,
 	type DesktopOrganization,
@@ -21,6 +20,7 @@ import {
 	encodeFileAsBase64,
 	ORGANIZATION_BRAND_COLOR_DEFAULTS,
 	ORGANIZATION_BRAND_COLOR_KEYS,
+	ORGANIZATION_BRAND_COLOR_LABELS,
 	ORGANIZATION_LOGO_CONTENT_TYPES,
 	ORGANIZATION_LOGO_MAX_BYTES,
 	type OrganizationBrandColorKey,
@@ -65,7 +65,7 @@ function OrganizationAvatar(props: {
 	return (
 		<span
 			class={cx(
-				"flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-3 text-[11px] font-medium text-gray-12",
+				"flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-ed-ctl text-[11px] font-medium text-ed-text-1",
 				props.class ?? "size-6",
 			)}
 		>
@@ -98,18 +98,6 @@ function BrandSettingsDialog(props: {
 	onOpenChange: (open: boolean) => void;
 	onSaved: (organization: DesktopOrganization) => void;
 }) {
-	const { t } = useI18n();
-	const brandColorLabel = (key: OrganizationBrandColorKey) =>
-		t(
-			(
-				{
-					primary: "editor.brandColorPrimary",
-					secondary: "editor.brandColorSecondary",
-					accent: "editor.brandColorAccent",
-					background: "editor.brandColorBackground",
-				} satisfies Record<OrganizationBrandColorKey, MessageKey>
-			)[key],
-		);
 	const [brandColors, setBrandColors] = createSignal<OrganizationBrandColors>(
 		EMPTY_ORGANIZATION_BRAND_COLORS,
 	);
@@ -163,11 +151,11 @@ function BrandSettingsDialog(props: {
 
 	const selectLogoFile = (file: File) => {
 		if (!isSupportedLogoContentType(file.type)) {
-			toast.error(t("editor.unsupportedLogoType"));
+			toast.error("Unsupported logo file type");
 			return;
 		}
 		if (file.size > ORGANIZATION_LOGO_MAX_BYTES) {
-			toast.error(t("editor.logoTooLarge"));
+			toast.error("Logo file must be less than 1MB");
 			return;
 		}
 
@@ -209,14 +197,14 @@ function BrandSettingsDialog(props: {
 				},
 			);
 
-			toast.success(t("editor.organizationBrandingUpdated"));
+			toast.success("Organization branding updated");
 			props.onSaved(updatedOrganization);
 			props.onOpenChange(false);
 		} catch (error) {
 			toast.error(
 				error instanceof Error
 					? error.message
-					: t("editor.organizationBrandingUpdateFailed"),
+					: "Failed to update organization branding",
 			);
 		} finally {
 			setSaving(false);
@@ -226,7 +214,7 @@ function BrandSettingsDialog(props: {
 	return (
 		<Dialog.Root open={props.open} onOpenChange={props.onOpenChange} size="sm">
 			<DialogContent
-				title={props.organization?.name ?? t("editor.organization")}
+				title={props.organization?.name ?? "Organization"}
 				class="gap-5 text-gray-12"
 				confirm={
 					<>
@@ -235,13 +223,13 @@ function BrandSettingsDialog(props: {
 							disabled={saving()}
 							onClick={() => props.onOpenChange(false)}
 						>
-							{t("common.cancel")}
+							Cancel
 						</Button>
 						<Dialog.ConfirmButton
 							disabled={saving() || !props.organization}
 							onClick={() => void save()}
 						>
-							{saving() ? t("editor.saving") : t("editor.save")}
+							{saving() ? "Saving..." : "Save"}
 						</Dialog.ConfirmButton>
 					</>
 				}
@@ -269,12 +257,12 @@ function BrandSettingsDialog(props: {
 							onClick={() => fileInput.click()}
 						>
 							<IconLucideUpload class="size-4" />
-							{t("editor.upload")}
+							Upload
 						</Button>
 						<Show when={displayedLogoUrl() || logoFile()}>
 							<Button variant="gray" class="gap-1.5" onClick={removeLogo}>
 								<IconLucideTrash2 class="size-4" />
-								{t("editor.remove")}
+								Remove
 							</Button>
 						</Show>
 					</div>
@@ -299,7 +287,7 @@ function BrandSettingsDialog(props: {
 							return (
 								<div class="flex min-h-10 items-center gap-3">
 									<span class="w-24 text-sm font-medium text-gray-11">
-										{brandColorLabel(key)}
+										{ORGANIZATION_BRAND_COLOR_LABELS[key]}
 									</span>
 									<div class="flex flex-1 items-center justify-end gap-2">
 										<Show
@@ -314,7 +302,7 @@ function BrandSettingsDialog(props: {
 														)
 													}
 												>
-													{t("editor.set")}
+													Set
 												</Button>
 											}
 										>
@@ -348,7 +336,6 @@ function BrandSettingsDialog(props: {
 }
 
 export function OrganizationDropdown() {
-	const { t } = useI18n();
 	const organizationSelection = createSelectedOrganization();
 	const [settingsOrganizationId, setSettingsOrganizationId] = createSignal<
 		string | null
@@ -368,28 +355,27 @@ export function OrganizationDropdown() {
 	const triggerLabel = createMemo(() => {
 		const availability = organizationSelection.availability();
 		if (availability === "available") {
-			return selectedOrganization()?.name ?? t("editor.organization");
+			return selectedOrganization()?.name ?? "Organization";
 		}
-		if (availability === "loading") return t("common.loading");
-		if (availability === "unavailable") return t("editor.organization");
-		return t("settings.signIn");
+		if (availability === "loading") return "Loading...";
+		if (availability === "unavailable") return "Organization";
+		return "Sign in";
 	});
 	const fallbackTitle = createMemo(() => {
 		const availability = organizationSelection.availability();
-		if (availability === "loading") return t("editor.loadingOrganizations");
-		if (availability === "unavailable")
-			return t("editor.unableToLoadOrganizations");
-		return t("editor.organizationBrandingSignInRequired");
+		if (availability === "loading") return "Loading organizations";
+		if (availability === "unavailable") return "Unable to load organizations";
+		return "Organization branding requires sign in";
 	});
 	const fallbackDescription = createMemo(() => {
 		const availability = organizationSelection.availability();
 		if (availability === "loading") {
-			return t("editor.fetchingOrganizationBranding");
+			return "Fetching organization branding from Cap web.";
 		}
 		if (availability === "unavailable") {
-			return t("editor.organizationBrandingUnavailableDescription");
+			return "Organization branding uses live Cap web data. Connect to Cap web to select an organization and use its colours.";
 		}
-		return t("editor.organizationBrandingSignInDescription");
+		return "Sign in to select an organization, edit brand colours, and use those colours in Studio.";
 	});
 
 	const selectOrganization = (organization: DesktopOrganization) => {
@@ -415,8 +401,12 @@ export function OrganizationDropdown() {
 					as={KDropdownMenu.Trigger}
 					leftIcon={<IconLucideBuilding2 class="size-4" />}
 					rightIcon={<IconCapChevronDown />}
+					title={triggerLabel()}
+					aria-label={`Organization: ${triggerLabel()}`}
 				>
-					<span class="max-w-32 truncate">{triggerLabel()}</span>
+					<span class="block max-w-32 truncate max-[1200px]:hidden">
+						{triggerLabel()}
+					</span>
 				</EditorButton>
 				<KDropdownMenu.Portal>
 					<Suspense>
@@ -430,10 +420,10 @@ export function OrganizationDropdown() {
 									<div class="p-3">
 										<div class="flex flex-col gap-3">
 											<div class="flex flex-col gap-1">
-												<span class="text-sm font-medium text-gray-12">
+												<span class="text-sm font-medium text-ed-text-1">
 													{fallbackTitle()}
 												</span>
-												<span class="text-xs leading-5 text-gray-11">
+												<span class="text-xs leading-5 text-ed-text-2">
 													{fallbackDescription()}
 												</span>
 											</div>
@@ -443,7 +433,7 @@ export function OrganizationDropdown() {
 												}
 											>
 												<SignInButton class="w-full justify-center">
-													{t("settings.signIn")}
+													Sign In
 												</SignInButton>
 											</Show>
 											<Show
@@ -458,7 +448,7 @@ export function OrganizationDropdown() {
 													disabled={organizationSelection.refreshing()}
 												>
 													<IconLucideRefreshCw class="size-4" />
-													{t("common.retry")}
+													Retry
 												</Button>
 											</Show>
 										</div>
@@ -472,8 +462,8 @@ export function OrganizationDropdown() {
 									<For
 										each={organizationSelection.organizations()}
 										fallback={
-											<div class="py-1 text-center text-sm text-gray-11">
-												{t("editor.noOrganizations")}
+											<div class="py-1 text-center text-sm text-ed-text-3">
+												No organizations
 											</div>
 										}
 									>
@@ -489,7 +479,7 @@ export function OrganizationDropdown() {
 												<Show
 													when={selectedOrganization()?.id === organization.id}
 												>
-													<IconLucideCheck class="size-4 text-blue-500" />
+													<IconLucideCheck class="size-4 text-ed-accent" />
 												</Show>
 											</DropdownItem>
 										)}
@@ -498,7 +488,7 @@ export function OrganizationDropdown() {
 								<Show when={selectedOrganization()?.canEditBrand}>
 									<MenuItemList<typeof KDropdownMenu.Group>
 										as={KDropdownMenu.Group}
-										class="border-t"
+										class="border-t border-ed-line"
 									>
 										<DropdownItem
 											onSelect={() =>
@@ -508,7 +498,7 @@ export function OrganizationDropdown() {
 											}
 										>
 											<IconLucidePalette class="size-4" />
-											{t("editor.brandSettings")}
+											Brand settings
 										</DropdownItem>
 									</MenuItemList>
 								</Show>

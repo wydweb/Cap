@@ -8,6 +8,7 @@ import { commands, events, type RecordingMode } from "~/utils/tauri";
 
 interface ModeProps {
 	onInfoClick?: () => void;
+	locked?: boolean;
 }
 
 type ModeButtonConfig = {
@@ -50,6 +51,7 @@ const Mode = (props: ModeProps) => {
 	];
 
 	const handleInfoClick = () => {
+		if (props.locked) return;
 		if (props.onInfoClick) {
 			props.onInfoClick();
 		} else {
@@ -63,7 +65,7 @@ const Mode = (props: ModeProps) => {
 		try {
 			localStorage.setItem("cap.settings.scrollToSection", section);
 		} catch {}
-		await commands.showWindow({ Settings: { page: "general" } });
+		await commands.showWindow({ Settings: { page: "quality" } });
 		await events.requestScrollToSettingsSection.emit({ section });
 	};
 
@@ -72,7 +74,11 @@ const Mode = (props: ModeProps) => {
 			<button
 				type="button"
 				onClick={handleInfoClick}
-				class="absolute -left-1.5 -top-2 p-1 rounded-full w-fit bg-gray-5 group focus:outline-none"
+				disabled={props.locked}
+				class={cx(
+					"absolute -left-1.5 -top-2 p-1 rounded-full w-fit bg-gray-5 group focus:outline-none",
+					props.locked && "opacity-50",
+				)}
 				aria-label={t("recording.modeInfo")}
 			>
 				<IconCapInfo class="invert transition-opacity duration-200 size-2.5 dark:invert-0 group-hover:opacity-50" />
@@ -92,14 +98,18 @@ const Mode = (props: ModeProps) => {
 							as="button"
 							type="button"
 							onClick={() => {
+								if (props.locked) return;
 								setOptions({ mode: button.mode });
 								commands.setRecordingMode(button.mode);
 							}}
+							aria-disabled={props.locked && !isSelected()}
 							class={cx(
 								"relative flex justify-center items-center rounded-full transition-all duration-200 size-7 focus:outline-none",
 								isSelected()
 									? "ring-2 ring-offset-1 ring-offset-gray-1 bg-gray-7 hover:bg-gray-7 ring-blue-500"
-									: "bg-gray-3 hover:bg-gray-7",
+									: props.locked
+										? "bg-gray-3 opacity-40 cursor-default"
+										: "bg-gray-3 hover:bg-gray-7",
 							)}
 						>
 							<button.icon class={button.iconClass} />

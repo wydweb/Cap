@@ -20,7 +20,6 @@ import {
 import toast from "solid-toast";
 import { CapErrorBoundary } from "~/components/CapErrorBoundary";
 import { SignInButton } from "~/components/SignInButton";
-import { useI18n } from "~/i18n";
 
 import { authStore, userProfileStore } from "~/store";
 import { resetUser, trackEvent } from "~/utils/analytics";
@@ -31,6 +30,7 @@ import {
 	getConfiguredServerUrl,
 	protectedHeaders,
 } from "~/utils/web-api";
+import IconLucideSlidersHorizontal from "~icons/lucide/sliders-horizontal";
 import IconLucideTerminal from "~icons/lucide/terminal";
 import IconLucideUserRound from "~icons/lucide/user-round";
 import IconLucideZap from "~icons/lucide/zap";
@@ -134,7 +134,6 @@ function SettingsContentSkeleton() {
 }
 
 export default function Settings(props: RouteSectionProps) {
-	const { t } = useI18n();
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	const signIn = createSignInMutation();
@@ -199,68 +198,73 @@ export default function Settings(props: RouteSectionProps) {
 	const settingsItems = [
 		{
 			href: "general",
-			name: t("settings.general"),
+			name: "General",
 			icon: IconCapSettings,
 		},
 		{
+			href: "quality",
+			name: "Recording quality",
+			icon: IconLucideSlidersHorizontal,
+		},
+		{
 			href: "hotkeys",
-			name: t("settings.shortcuts"),
+			name: "Shortcuts",
 			icon: IconCapHotkeys,
 		},
 		{
 			href: "cli",
-			name: t("settings.cli"),
+			name: "CLI",
 			icon: IconLucideTerminal,
 		},
 		{
 			href: "recordings",
-			name: t("settings.recordings"),
+			name: "Recordings",
 			icon: IconLucideSquarePlay,
 		},
 		{
 			href: "screenshots",
-			name: t("settings.screenshots"),
+			name: "Screenshots",
 			icon: IconLucideImage,
 		},
 		{
 			href: "automations",
-			name: t("settings.automations"),
+			name: "Automations",
 			icon: IconLucideZap,
 		},
 		{
 			href: "transcription",
-			name: t("settings.transcription"),
+			name: "Transcription",
 			icon: IconCapCaptions,
 		},
 		{
 			href: "integrations",
-			name: t("settings.integrations"),
+			name: "Integrations",
 			icon: IconLucideUnplug,
 		},
 		{
 			href: "license",
-			name: t("settings.license"),
+			name: "Plan & license",
 			icon: IconLucideGift,
 		},
 		{
 			href: "experimental",
-			name: t("settings.experimental"),
+			name: "Experimental",
 			icon: IconCapSettings,
 		},
 		{
 			href: "feedback",
-			name: t("settings.feedback"),
+			name: "Feedback",
 			icon: IconLucideMessageSquarePlus,
 		},
 		{
 			href: "changelog",
-			name: t("settings.changelog"),
+			name: "Changelog",
 			icon: IconLucideBell,
 		},
 	];
 	const accountName = createMemo(() => {
-		if (!auth()) return t("settings.clickToSignIn");
-		if (!userProfile.isSuccess) return t("settings.signedIn");
+		if (!auth()) return "Click to sign in";
+		if (!userProfile.isSuccess) return "Signed in";
 
 		const name = userProfile.data?.name?.trim();
 		if (name) return name;
@@ -268,7 +272,7 @@ export default function Settings(props: RouteSectionProps) {
 		const email = userProfile.data?.email?.trim();
 		if (email) return email;
 
-		return t("settings.signedIn");
+		return "Signed in";
 	});
 	const accountRemoteImageUrl = createMemo(() => {
 		if (!userProfile.isSuccess) return null;
@@ -427,31 +431,29 @@ export default function Settings(props: RouteSectionProps) {
 			const update = await commands.updatesCheck();
 
 			if (!update) {
-				await dialog.message(t("settings.noUpdateMessage"), {
-					title: t("settings.noUpdate"),
-					kind: "info",
-				});
+				await dialog.message(
+					"You're already using the latest version of Cap.",
+					{
+						title: "No Update Available",
+						kind: "info",
+					},
+				);
 				return;
 			}
 
 			const shouldUpdate = await dialog.confirm(
-				t("settings.updateAvailable", { version: update.version }),
-				{
-					title: t("settings.updateCap"),
-					okLabel: t("settings.update"),
-					cancelLabel: t("settings.ignore"),
-				},
+				`Version ${update.version} of Cap is available, would you like to install it?`,
+				{ title: "Update Cap", okLabel: "Update", cancelLabel: "Ignore" },
 			);
 
 			if (shouldUpdate) navigate("/update");
 		} catch (e) {
 			console.error("Failed to check for updates:", e);
 			const openDownload = await dialog
-				.confirm(t("settings.updateCheckFailed"), {
-					title: t("settings.updateCap"),
-					okLabel: t("settings.download"),
-					cancelLabel: t("settings.later"),
-				})
+				.confirm(
+					"Couldn't check for updates automatically. You can download the latest version of Cap from cap.so/download \u2014 your data won't be lost.",
+					{ title: "Update Cap", okLabel: "Download", cancelLabel: "Later" },
+				)
 				.catch(() => false);
 			if (openDownload) await shell.open("https://cap.so/download");
 		} finally {
@@ -499,7 +501,7 @@ export default function Settings(props: RouteSectionProps) {
 							{accountName()}
 						</p>
 						<p class="h-[13px] truncate text-[11px] leading-[13px] text-gray-10">
-							{t("settings.account")}
+							Account
 						</p>
 					</div>
 				</button>
@@ -540,7 +542,7 @@ export default function Settings(props: RouteSectionProps) {
 											shell.open("https://cap.so/download/versions")
 										}
 									>
-										{t("settings.viewPreviousVersions")}
+										View previous versions
 									</button>
 									<button
 										type="button"
@@ -549,8 +551,8 @@ export default function Settings(props: RouteSectionProps) {
 										onClick={checkForUpdates}
 									>
 										{isCheckingForUpdates()
-											? t("settings.checkingForUpdates")
-											: t("settings.checkForUpdates")}
+											? "Checking..."
+											: "Check for updates"}
 									</button>
 								</div>
 							</div>
@@ -564,10 +566,10 @@ export default function Settings(props: RouteSectionProps) {
 					>
 						{auth() ? (
 							<Button onClick={handleAuth} variant="gray" class="w-full">
-								{t("settings.signOut")}
+								Sign Out
 							</Button>
 						) : (
-							<SignInButton>{t("settings.signIn")}</SignInButton>
+							<SignInButton>Sign In</SignInButton>
 						)}
 					</Show>
 				</div>

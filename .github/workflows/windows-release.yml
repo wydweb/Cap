@@ -75,7 +75,7 @@ jobs:
           "@ | Set-Content .env
 
       - name: Prepare native dependencies
-        run: pnpm -w cap-setup
+        run: bun run cap-setup
 
       - name: Build desktop sidecars
         shell: bash
@@ -90,7 +90,7 @@ jobs:
 
       - name: Build NSIS installer
         working-directory: apps/desktop
-        run: pnpm build:tauri --target x86_64-pc-windows-msvc --config src-tauri/tauri.github-release.conf.json --bundles nsis
+        run: bun run build:tauri --target x86_64-pc-windows-msvc --config src-tauri/tauri.github-release.conf.json --bundles nsis
         env:
           CI: false
 

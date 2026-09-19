@@ -129,9 +129,32 @@ export const users = mysqlTable(
 		defaultOrgId:
 			nanoIdNullable("defaultOrgId").$type<Organisation.OrganisationId>(),
 		authSessionVersion: int("authSessionVersion").notNull().default(0),
+		marketingOrigin: varchar("marketingOrigin", { length: 20 })
+			.notNull()
+			.default("unknown"),
 	},
 	(table) => ({
 		emailIndex: uniqueIndex("email_idx").on(table.email),
+	}),
+);
+
+export const loopsSyncJobs = mysqlTable(
+	"loops_sync_jobs",
+	{
+		userId: nanoId("userId").notNull().primaryKey().$type<User.UserId>(),
+		revision: int("revision").notNull().default(1),
+		nextAttemptAt: datetime("nextAttemptAt", { mode: "date" }).notNull(),
+		leaseToken: varchar("leaseToken", { length: 36 }),
+		leaseUntil: datetime("leaseUntil", { mode: "date" }),
+		failures: int("failures").notNull().default(0),
+		lastError: varchar("lastError", { length: 64 }),
+		profileHash: varchar("profileHash", { length: 64 }),
+		teammateJoinedAt: datetime("teammateJoinedAt", { mode: "date" }),
+		syncedEmail: varchar("syncedEmail", { length: 255 }),
+		lastSyncedAt: datetime("lastSyncedAt", { mode: "date" }),
+	},
+	(table) => ({
+		dueIndex: index("loops_sync_due_idx").on(table.nextAttemptAt),
 	}),
 );
 
@@ -427,11 +450,20 @@ export const videos = mysqlTable(
 				| {
 						type: "desktopMP4";
 						outputKey?: string;
+						audioLevelOutputKey?: string;
+						audioLevelSourceKey?: string;
 						thumbnailKey?: string;
 						previewKey?: string;
 				  }
 				| { type: "desktopSegments" }
-				| { type: "webMP4" }
+				| {
+						type: "webMP4";
+						outputKey?: string;
+						thumbnailKey?: string;
+						previewKey?: string;
+						audioLevelOutputKey?: string;
+						audioLevelSourceKey?: string;
+				  }
 			>()
 			.notNull()
 			.default({ type: "MediaConvert" }),
@@ -1482,6 +1514,22 @@ export const videoProcessingJobs = mysqlTable(
 			table.videoId,
 		),
 	],
+);
+
+export const mediaProcessingBudgets = mysqlTable(
+	"media_processing_budgets",
+	{
+		id: varchar("id", { length: 64 }).primaryKey().notNull(),
+		reservedBytes: bigint("reserved_bytes", { mode: "number", unsigned: true })
+			.notNull()
+			.default(0),
+		limitBytes: bigint("limit_bytes", {
+			mode: "number",
+			unsigned: true,
+		}).notNull(),
+		expiresAt: datetime("expires_at", { fsp: 3 }).notNull(),
+	},
+	(table) => [index("media_budget_expiry_idx").on(table.expiresAt)],
 );
 
 export const importedVideos = mysqlTable(
